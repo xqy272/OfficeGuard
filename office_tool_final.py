@@ -387,9 +387,14 @@ class OfficeGuardApp:
         pwd_frame = tk.Frame(self.tab_stealth)
         pwd_frame.pack(pady=10)
         tk.Label(pwd_frame, text="解锁密码 (纯数字):").pack(side=tk.LEFT)
-        self.entry_pwd = ttk.Entry(pwd_frame, width=12, justify="center")
+        self.entry_pwd = ttk.Entry(pwd_frame, width=12, justify="center", show="*")
         self.entry_pwd.pack(side=tk.LEFT, padx=5)
         self.entry_pwd.insert(0, str(self.cfg.get("password")))
+        
+        # 显示/隐藏密码切换按钮
+        self.show_pwd_btn = tk.Button(pwd_frame, text="👁️", width=3, relief="groove",
+                                       command=self.toggle_password_visibility)
+        self.show_pwd_btn.pack(side=tk.LEFT, padx=2)
         
         tk.Label(self.tab_stealth, text="🛡️ 内核级屏蔽", font=("微软雅黑", 14, "bold"), fg="#e74c3c").pack(pady=10)
         info = (
@@ -402,6 +407,16 @@ class OfficeGuardApp:
         tk.Button(self.tab_stealth, text="⚡ 立即锁死系统", bg="#2c3e50", fg="white", 
                   font=("微软雅黑", 12, "bold"), height=2,
                   command=self.lock_system).pack(side=tk.BOTTOM, fill="x", pady=20)
+    
+    def toggle_password_visibility(self):
+        """切换密码显示/隐藏"""
+        current_show = self.entry_pwd.cget('show')
+        if current_show == '*':
+            self.entry_pwd.config(show="")
+            self.show_pwd_btn.config(text="🙈")
+        else:
+            self.entry_pwd.config(show="*")
+            self.show_pwd_btn.config(text="👁️")
 
     # --- 定时与缓冲逻辑 ---
     def start_timer(self, action):
@@ -499,6 +514,7 @@ class OfficeGuardApp:
         
         self.action_executed = True
         self.cancel_timer_manual(show_msg=False)
+        self.reset_ui_after_action()  # 重置UI
         
         try:
             if self.timer_action == "shutdown":
@@ -555,6 +571,32 @@ class OfficeGuardApp:
         self.btn_shutdown.config(state=state_inv)
         self.btn_sleep.config(state=state_inv)
         self.btn_cancel.config(state=state_run)
+    
+    def reset_ui_after_action(self):
+        """执行完操作后重置UI到初始状态"""
+        try:
+            # 重置倒计时显示
+            self.lbl_countdown.config(text="00:00:00", fg="#ccc")
+            self.lbl_status.config(text="状态: 准备就绪", fg="gray")
+            self.progress["value"] = 0
+            
+            # 重置输入框
+            self.entry_time.delete(0, tk.END)
+            self.entry_time.insert(0, str(self.cfg.get("timer_minutes")))
+            self.entry_grace.delete(0, tk.END)
+            self.entry_grace.insert(0, str(self.cfg.get("grace_seconds")))
+            
+            # 重置按钮状态
+            self.update_ui_state(running=False)
+            
+            # 重置内部状态
+            self.timer_running = False
+            self.in_grace_period = False
+            self.action_executed = False
+            
+            logger.info("UI已重置")
+        except Exception as e:
+            logger.error(f"UI重置失败: {e}")
 
     def get_cursor_pos(self):
         pt = POINT()
