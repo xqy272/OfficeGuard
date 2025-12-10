@@ -183,8 +183,8 @@ class ConfigManager:
             "timer_minutes": 60,
             "grace_seconds": 30,
             "mouse_threshold": 15,
-            "win_w": 520,
-            "win_h": 480,
+            "win_w": 780,
+            "win_h": 600,
             "win_x": -1,
             "win_y": -1,
             "first_run": True  # 首次运行标志
