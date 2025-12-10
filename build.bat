@@ -1,11 +1,11 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 >nul
 echo ==========================================
 echo   办公室全能卫士 - 一键打包工具
 echo ==========================================
 echo.
 
-:: 检查是否安装 PyInstaller
 python -c "import PyInstaller" 2>nul
 if errorlevel 1 (
     echo [错误] 未安装 PyInstaller
@@ -22,7 +22,6 @@ if errorlevel 1 (
 echo [✓] PyInstaller 已就绪
 echo.
 
-:: 清理旧文件
 echo [1/4] 清理旧文件...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
@@ -30,12 +29,10 @@ if exist "办公室全能卫士.spec" del /q "办公室全能卫士.spec"
 echo [✓] 清理完成
 echo.
 
-:: 开始打包
 echo [2/4] 开始打包（这可能需要几分钟）...
 echo.
 
-:: 打包命令（单文件模式）
-pyinstaller ^
+python -m PyInstaller ^
     --onefile ^
     --windowed ^
     --name="办公室全能卫士" ^
@@ -55,19 +52,10 @@ echo.
 echo [✓] 打包完成
 echo.
 
-:: 检查产物
 echo [3/4] 检查打包产物...
 if exist "dist\办公室全能卫士.exe" (
     echo [✓] exe 文件已生成
-    
-    :: 获取文件大小
-    for %%A in ("dist\办公室全能卫士.exe") do (
-        set size=%%~zA
-    )
-    
-    :: 转换为MB
-    set /a size_mb=!size! / 1048576
-    echo [i] 文件大小: !size_mb! MB
+    dir "dist\办公室全能卫士.exe" | findstr "办公室全能卫士.exe"
 ) else (
     echo [错误] exe 文件未找到
     pause
@@ -75,17 +63,14 @@ if exist "dist\办公室全能卫士.exe" (
 )
 echo.
 
-:: 创建发布包
 echo [4/4] 创建发布包...
 set version=1.0.0
 set release_dir=OfficeGuard_v%version%
 if exist "%release_dir%" rmdir /s /q "%release_dir%"
 mkdir "%release_dir%"
 
-:: 复制exe
 copy "dist\办公室全能卫士.exe" "%release_dir%\" >nul
 
-:: 创建使用说明
 (
 echo 办公室全能卫士 v%version%
 echo ===================================
@@ -111,7 +96,6 @@ echo 【技术支持】
 echo 遇到问题请查看日志文件
 ) > "%release_dir%\使用说明.txt"
 
-:: 创建更新日志
 (
 echo 办公室全能卫士 - 更新日志
 echo ===================================
@@ -132,7 +116,6 @@ echo.
 echo [✓] 发布包创建完成: %release_dir%\
 echo.
 
-:: 显示结果
 echo ==========================================
 echo   打包成功！
 echo ==========================================
@@ -150,7 +133,6 @@ echo.
 echo ==========================================
 echo.
 
-:: 询问是否打开文件夹
 choice /C YN /M "是否打开产物文件夹"
 if errorlevel 2 goto end
 if errorlevel 1 explorer dist
