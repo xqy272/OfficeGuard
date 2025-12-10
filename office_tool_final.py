@@ -240,7 +240,7 @@ class ConfigManager:
 class OfficeGuardApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("OfficeGuard - 办公室全能卫士 v1.0.0")
+        self.root.title("OfficeGuard - 办公室全能卫士 v1.0.1")
         
         self.cfg = ConfigManager()
         
