@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.3.2-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
@@ -26,8 +26,10 @@
 - **系统托盘**: 静默运行于后台，随时可用
 - **密码保护**: 优化完成后需输入密码恢复
 
-### 🚀 开机自动化
-- **开机自启动**: 系统开机自动运行程序
+### 🚀 开机自动化 (v1.3.2优化)
+- **开机自启动**: 使用Windows任务计划程序，不受UAC限制
+- **自动获取权限**: 任务计划自动以最高权限运行
+- **一键清理**: 关闭自启动时自动删除任务
 - **自动登录**: 集成Sysinternals Autologon，LSA加密存储
 - **启动软件管理**: 自定义开机启动的应用程序列表
 - **智能判断**: 区分开机和睡眠唤醒

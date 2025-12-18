@@ -409,61 +409,207 @@ class ConfigManager:
 # ==========================================
 def is_system_boot():
     """
-    判断是否是系统开机（非睡眠唤醒）
-    方法：检查系统运行时间，如果小于5分钟，认为是开机
+    判断是否是系统开机启动（而非睡眠唤醒或正常启动）
+    方法1：检查是否设置了 --boot-startup 命令行参数（由注册表启动）
+    方法2：检查系统运行时间，如果小于3分钟，认为是开机（降级方案）
     """
     try:
-        # 获取系统启动时间（单位：毫秒）
-        tick_count = kernel32.GetTickCount64()
-        # 转换为分钟
-        uptime_minutes = tick_count / 1000 / 60
+        # 方法1：检查命令行参数标志（最准确）
+        # 当通过注册表开机启动时，使用 --boot-startup 参数启动
+        if '--boot-startup' in sys.argv:
+            logger.info("检测到开机启动标志（命令行参数: --boot-startup）")
+            return True
         
+        # 方法2：检查系统运行时间（备用方案）
+        tick_count = kernel32.GetTickCount64()
+        uptime_minutes = tick_count / 1000 / 60
         logger.info(f"系统运行时间: {uptime_minutes:.2f} 分钟")
         
-        # 如果系统运行时间小于5分钟，认为是开机
-        return uptime_minutes < 5
+        # 系统运行时间小于3分钟，认为是开机
+        if uptime_minutes < 3:
+            logger.info("检测到开机启动（运行时间<3分钟）")
+            return True
+        
+        logger.info("检测为正常启动（非开机启动）")
+        return False
     except Exception as e:
         logger.error(f"检测系统启动时间失败: {e}")
         return False
 
 def set_autostart(enable, app_path=None):
     """
-    设置开机自启动
+    使用Windows任务计划程序设置开机自启动（绕过UAC限制）
     :param enable: True=启用, False=禁用
     :param app_path: 应用程序路径，如果为None则使用当前exe路径
     """
     try:
-        import winreg
+        import subprocess
         
+        # 获取应用程序路径
         if app_path is None:
             if is_frozen():
                 app_path = sys.executable
             else:
                 app_path = os.path.abspath(__file__)
         
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        app_name = "OfficeGuard"
+        # 验证路径是否存在
+        if not os.path.exists(app_path):
+            logger.error(f"应用程序路径不存在: {app_path}")
+            return False
         
-        # 打开注册表键
-        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+        # 转换为规范路径
+        app_path = os.path.abspath(app_path)
+        task_name = "OfficeGuard_AutoStart"
         
         if enable:
-            # 添加启动项
-            winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{app_path}"')
-            logger.info(f"已添加开机自启动: {app_path}")
-        else:
-            # 删除启动项
+            # 创建任务计划程序
+            logger.info(f"正在创建任务计划: {task_name}")
+            
+            # 先删除旧任务（如果存在）
             try:
-                winreg.DeleteValue(key, app_name)
-                logger.info("已删除开机自启动")
-            except FileNotFoundError:
-                logger.info("启动项不存在，无需删除")
-        
-        winreg.CloseKey(key)
-        return True
+                subprocess.run(
+                    ['schtasks', '/Delete', '/TN', task_name, '/F'],
+                    capture_output=True,
+                    timeout=10,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+            except:
+                pass
+            
+            # 创建新任务
+            # /SC ONLOGON: 用户登录时触发
+            # /TR: 要执行的程序和参数
+            # /RL HIGHEST: 使用最高权限运行
+            # /F: 强制创建（覆盖已存在的任务）
+            cmd = [
+                'schtasks',
+                '/Create',
+                '/TN', task_name,
+                '/TR', f'"{app_path}" --boot-startup',
+                '/SC', 'ONLOGON',
+                '/RL', 'HIGHEST',
+                '/F'
+            ]
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            
+            if result.returncode == 0:
+                logger.info(f"任务计划创建成功: {task_name}")
+                logger.info(f"启动命令: {app_path} --boot-startup")
+                return True
+            else:
+                logger.error(f"创建任务计划失败: {result.stderr}")
+                return False
+        else:
+            # 删除任务计划
+            logger.info(f"正在删除任务计划: {task_name}")
+            
+            cmd = [
+                'schtasks',
+                '/Delete',
+                '/TN', task_name,
+                '/F'
+            ]
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            
+            if result.returncode == 0:
+                logger.info(f"任务计划已删除: {task_name}")
+                return True
+            elif 'ERROR: The system cannot find' in result.stderr:
+                logger.info("任务计划不存在，无需删除")
+                return True
+            else:
+                logger.warning(f"删除任务计划时出现警告: {result.stderr}")
+                return True  # 即使出错也返回True，因为目标是禁用
     except Exception as e:
         logger.error(f"设置开机自启动失败: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
+
+def check_autostart_status():
+    """
+    检查任务计划程序中的开机自启动状态
+    返回: (是否启用, 任务信息, 问题列表)
+    """
+    try:
+        import subprocess
+        
+        task_name = "OfficeGuard_AutoStart"
+        problems = []
+        
+        # 查询任务计划
+        cmd = [
+            'schtasks',
+            '/Query',
+            '/TN', task_name,
+            '/FO', 'LIST',
+            '/V'
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        
+        if result.returncode == 0:
+            # 任务存在，解析输出
+            output = result.stdout
+            
+            # 提取任务状态
+            task_info = f"任务计划: {task_name}"
+            
+            # 检查是否启用
+            if '已禁用' in output or 'Disabled' in output:
+                problems.append("任务已创建但被禁用")
+            
+            # 检查执行路径
+            import re
+            match = re.search(r'要执行的操作:.*?([A-Za-z]:\\[^\r\n]+)', output)
+            if not match:
+                match = re.search(r'Task To Run:.*?([A-Za-z]:\\[^\r\n]+)', output)
+            
+            if match:
+                exe_path = match.group(1).strip()
+                task_info = exe_path
+                
+                # 检查文件是否存在
+                if '"' in exe_path:
+                    exe_path = exe_path.split('"')[1]
+                else:
+                    exe_path = exe_path.split()[0]
+                
+                if not os.path.exists(exe_path):
+                    problems.append(f"EXE文件不存在: {exe_path}")
+                
+                # 检查是否有--boot-startup参数
+                if "--boot-startup" not in match.group(1):
+                    problems.append("缺少--boot-startup参数")
+            
+            return (True, task_info, problems)
+        else:
+            # 任务不存在
+            return (False, None, ["任务计划不存在"])
+            
+    except Exception as e:
+        logger.error(f"检查任务计划状态失败: {e}")
+        return (False, None, [f"检查失败: {e}"])
 
 def download_autologon():
     """
@@ -554,7 +700,25 @@ def set_autologon(enable, username="", password="", domain="."):
                 return False
         else:
             # 禁用自动登录
-            # 使用注册表方式清除
+            # 方法1: 使用Autologon工具禁用
+            logger.info("正在禁用自动登录")
+            
+            # Autologon.exe /delete 可以删除所有自动登录设置
+            cmd = [autologon_path, '/delete', '/accepteula']
+            
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                logger.info("已使用Autologon禁用自动登录")
+            except Exception as e:
+                logger.warning(f"Autologon禁用失败: {e}，尝试手动清理")
+            
+            # 方法2: 手动清理注册表（确保完全清除）
             import winreg
             key_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
             
@@ -589,6 +753,7 @@ def set_autologon(enable, username="", password="", domain="."):
 def launch_startup_apps(app_list):
     """
     启动指定的应用程序列表
+    仅在开机启动时执行，普通启动不生效
     :param app_list: 应用程序列表 [{"name": "软件名", "path": "路径", "enabled": True}]
     """
     import subprocess
@@ -621,13 +786,25 @@ def launch_startup_apps(app_list):
     
     return launched, failed
 
+def remove_boot_startup_args():
+    """
+    清除启动参数中的 --boot-startup 标志
+    防止在重新启动或重新打开窗口时误认为是开机启动
+    """
+    try:
+        if '--boot-startup' in sys.argv:
+            sys.argv.remove('--boot-startup')
+            logger.info("已清除 --boot-startup 参数")
+    except Exception as e:
+        logger.debug(f"清除启动参数时出错: {e}")
+
 # ==========================================
 #      主程序逻辑
 # ==========================================
 class OfficeGuardApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("系统优化助手 v1.3.0")
+        self.root.title("系统优化助手 v1.3.2")
         
         self.cfg = ConfigManager()
         
@@ -663,6 +840,10 @@ class OfficeGuardApp:
         atexit.register(self.cleanup_on_exit)
 
         self.setup_ui()
+        
+        # 清除启动参数，防止后续重新启动时误判
+        remove_boot_startup_args()
+        
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         # 安装全局快捷键
@@ -1737,6 +1918,12 @@ class OfficeGuardApp:
         logger.info("检测到系统开机，执行开机任务...")
         
         try:
+            # 检查开机自启动是否启用
+            autostart_enabled = self.cfg.get("autostart_enabled")
+            if not autostart_enabled:
+                logger.info("开机自启动已禁用，跳过开机任务")
+                return
+            
             # 获取启动软件列表
             startup_apps = self.cfg.get("startup_apps")
             
@@ -1767,6 +1954,21 @@ class OfficeGuardApp:
             
             if result:
                 self.cfg.set("autostart_enabled", autostart_enabled)
+                
+                # 诊断开机自启动状态
+                if autostart_enabled:
+                    enabled, reg_value, problems = check_autostart_status()
+                    if problems:
+                        warning_msg = "⚠️ 开机自启动可能存在问题：\n\n"
+                        for problem in problems:
+                            warning_msg += f"• {problem}\n"
+                        warning_msg += f"\n注册表值: {reg_value}\n\n"
+                        warning_msg += "建议：\n"
+                        warning_msg += "1. 将程序复制到非OneDrive路径（如C:\\Program Files）\n"
+                        warning_msg += "2. 避免使用中文路径\n"
+                        warning_msg += "3. 重新设置开机自启动"
+                        logger.warning(f"开机自启动问题: {problems}")
+                        messagebox.showwarning("开机自启动警告", warning_msg)
                 
                 # 保存AutoLogon设置
                 autologon_enabled = self.var_autologon.get()
