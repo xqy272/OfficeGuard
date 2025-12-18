@@ -226,28 +226,15 @@ def decrypt_data(encrypted_str):
         return None
 
 # ==========================================
-#      0. 权限与优先级配置
+#      0. 权限检查
 # ==========================================
-def run_as_admin():
+def is_admin():
+    """检查是否具有管理员权限"""
     try:
-        if ctypes.windll.shell32.IsUserAnAdmin():
-            return True
-        else:
-            ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
-            sys.exit()
+        return ctypes.windll.shell32.IsUserAnAdmin()
     except Exception as e:
-        logger.warning(f"管理员检查失败: {e}")
+        logger.warning(f"管理员权限检查失败: {e}")
         return False
-
-run_as_admin()
-
-# 提权至实时优先级
-try:
-    pid = ctypes.windll.kernel32.GetCurrentProcess()
-    ctypes.windll.kernel32.SetPriorityClass(pid, 0x00000100) # REALTIME_PRIORITY_CLASS
-    logger.info("进程优先级已提升")
-except Exception as e:
-    logger.warning(f"优先级提升失败: {e}")
 
 # ==========================================
 #      Windows API & 结构体
@@ -438,9 +425,9 @@ def is_system_boot():
 
 def set_autostart(enable, app_path=None):
     """
-    使用Windows任务计划程序设置开机自启动（绕过UAC限制）
+    使用Windows任务计划程序设置开机自启动
     :param enable: True=启用, False=禁用
-    :param app_path: 应用程序路径，如果为None则使用当前exe路径
+    :param app_path: 应用程序路径（可选）
     """
     try:
         import subprocess
@@ -543,7 +530,7 @@ def set_autostart(enable, app_path=None):
 def check_autostart_status():
     """
     检查任务计划程序中的开机自启动状态
-    返回: (是否启用, 任务信息, 问题列表)
+    :return: (是否启用, 任务信息, 问题列表)
     """
     try:
         import subprocess
@@ -652,25 +639,22 @@ def download_autologon():
 
 def set_autologon(enable, username="", password="", domain="."):
     """
-    使用Sysinternals Autologon设置Windows自动登录
-    使用LSA加密存储密码，比直接写注册表更安全
-    需要管理员权限
+    设置Windows自动登录（使用LSA加密）
     :param enable: True=启用, False=禁用
     :param username: 用户名
     :param password: 密码
-    :param domain: 域名，默认为本机（.）
+    :param domain: 域名，默认为本机
     """
     try:
         import subprocess
         
-        # 获取或下载Autologon工具
-        autologon_path = download_autologon()
-        
-        if not autologon_path:
-            logger.error("无法获取Autologon工具")
-            return False
-        
         if enable:
+            # 启用自动登录时才下载Autologon工具
+            autologon_path = download_autologon()
+            
+            if not autologon_path:
+                logger.error("无法获取Autologon工具")
+                return False
             # 启用自动登录
             # Autologon.exe username domain password /accepteula
             cmd = [
@@ -700,25 +684,10 @@ def set_autologon(enable, username="", password="", domain="."):
                 return False
         else:
             # 禁用自动登录
-            # 方法1: 使用Autologon工具禁用
             logger.info("正在禁用自动登录")
             
-            # Autologon.exe /delete 可以删除所有自动登录设置
-            cmd = [autologon_path, '/delete', '/accepteula']
-            
-            try:
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    creationflags=subprocess.CREATE_NO_WINDOW
-                )
-                logger.info("已使用Autologon禁用自动登录")
-            except Exception as e:
-                logger.warning(f"Autologon禁用失败: {e}，尝试手动清理")
-            
-            # 方法2: 手动清理注册表（确保完全清除）
+            # 直接使用注册表方式清理（最可靠）
+            # 不依赖Autologon工具的删除功能，避免参数问题
             import winreg
             key_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
             
@@ -808,7 +777,7 @@ class OfficeGuardApp:
         
         self.cfg = ConfigManager()
         
-        # --- 初始化窗口位置与大小 ---
+        # 初始化窗口位置与大小
         self.init_window_geometry()
         
         # 运行时变量
@@ -818,7 +787,7 @@ class OfficeGuardApp:
         self.target_timestamp = 0.0
         self.timer_job = None
         self.grace_job = None
-        self.action_executed = False  # 新增：防止重复执行
+        self.action_executed = False
         
         self.is_locked = False
         self.input_buffer = ""
@@ -1985,9 +1954,8 @@ class OfficeGuardApp:
                         messagebox.showwarning("警告", "请输入密码")
                         return
                     
-                    # 显示进度提示
-                    progress_msg = messagebox.showinfo("提示", "正在配置自动登录...\n首次使用会下载Autologon工具（约200KB）")
-                    
+                    # 直接执行，不显示阻塞式提示
+                    logger.info("正在配置自动登录，首次使用会下载Autologon工具")
                     result = set_autologon(True, username, password, domain)
                     if result:
                         self.cfg.set("autologon_enabled", True)
@@ -2000,9 +1968,20 @@ class OfficeGuardApp:
                         return
                 else:
                     # 禁用自动登录
-                    set_autologon(False)
-                    self.cfg.set("autologon_enabled", False)
-                    messagebox.showinfo("成功", "开机设置已保存！\n自动登录已禁用。")
+                    # 只有之前启用过才需要禁用
+                    if self.cfg.get("autologon_enabled"):
+                        result = set_autologon(False)
+                        if result:
+                            self.cfg.set("autologon_enabled", False)
+                            messagebox.showinfo("成功", "开机设置已保存！\n自动登录已禁用。")
+                        else:
+                            logger.warning("禁用自动登录失败，但继续保存其他设置")
+                            self.cfg.set("autologon_enabled", False)
+                            messagebox.showinfo("成功", "开机设置已保存！")
+                    else:
+                        # 从未启用过，无需禁用
+                        self.cfg.set("autologon_enabled", False)
+                        messagebox.showinfo("成功", "开机设置已保存！")
                 
                 self.cfg.save()
                 logger.info(f"开机设置已保存: 自启动={autostart_enabled}, 自动登录={autologon_enabled}")
