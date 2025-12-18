@@ -2,12 +2,12 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 
-一款功能强大的 Windows 系统优化工具，提供系统性能优化功能
+一款功能强大的 Windows 系统优化工具，支持定时任务、系统优化、开机自启动和自动登录
 
 [简体中文](README_zh.md) | [English](README.md)
 
@@ -15,17 +15,28 @@
 
 ## ✨ 主要特性
 
+### ⏱️ 定时任务
+- **定时关机/睡眠**: 灵活设置倒计时任务
+- **缓冲期机制**: 执行前可通过鼠标活动取消
+- **进度可视化**: 实时显示倒计时和进度条
+
 ### ⚡ 系统优化
 - **深度优化**: 优化系统性能，清理内存碎片
-- **全局快捷键**: Ctrl+Alt+L 快速启动优化
+- **全局快捷键**: 可自定义快捷键（默认Ctrl+Alt+L）
 - **系统托盘**: 静默运行于后台，随时可用
 - **密码保护**: 优化完成后需输入密码恢复
 
-### 🎯 隐蔽运行
-- **托盘图标**: 程序默认隐藏到系统托盘
-- **快捷访问**: 右键托盘图标快速操作
-- **静默恢复**: 优化完成后自动恢复，无提示
-- **迷惑性界面**: 采用系统工具风格设计
+### 🚀 开机自动化
+- **开机自启动**: 系统开机自动运行程序
+- **自动登录**: 集成Sysinternals Autologon，LSA加密存储
+- **启动软件管理**: 自定义开机启动的应用程序列表
+- **智能判断**: 区分开机和睡眠唤醒
+
+### 🔒 安全保护
+- **配置加密**: 使用Windows DPAPI加密配置文件
+- **用户绑定**: 只有当前用户可解密配置
+- **LSA加密**: 自动登录密码使用系统级加密
+- **安全存储**: 所有敏感信息加密保护
 
 ## 📥 快速开始
 

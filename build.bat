@@ -64,7 +64,7 @@ if exist "dist\系统优化助手.exe" (
 echo.
 
 echo [4/4] 创建发布包...
-set version=1.2.0
+set version=1.3.0
 set release_dir=OfficeGuard_v%version%
 if exist "%release_dir%" rmdir /s /q "%release_dir%"
 mkdir "%release_dir%"
@@ -85,11 +85,15 @@ echo 【功能说明】
 echo • 定时任务：设置定时关机/睡眠
 echo • 系统优化：优化系统性能
 echo • 全局快捷键：完全自定义
+echo • 开机自启动：系统启动时自动运行
+echo • 自动登录：安全的开机自动登录（LSA加密）
+echo • 启动软件管理：自定义开机启动软件列表
 echo • 托盘菜单：右键图标可进入设置
 echo.
 echo 【数据位置】
 echo 日志文件：C:\Users\{用户}\AppData\Local\OfficeGuard\logs\
-echo 配置文件：C:\Users\{用户}\AppData\Local\OfficeGuard\config\
+echo 配置文件：C:\Users\{用户}\AppData\Local\OfficeGuard\config\ (已加密)
+echo 工具目录：C:\Users\{用户}\AppData\Local\OfficeGuard\tools\
 echo.
 echo 【卸载说明】
 echo 直接删除 exe 文件即可
@@ -105,12 +109,14 @@ echo ===================================
 echo.
 echo v%version% - %date%
 echo ------------------
-echo [恢复] 恢复定时关机/睡眠功能
-echo [新增] 快捷键完全自定义功能
-echo [新增] 设置页面：可自定义修饰键和主键
-echo [新增] 支持字母键A-Z和功能键F1-F12
-echo [优化] 三标签页布局：定时任务、系统优化、设置
-echo [优化] 实时预览快捷键设置
+echo [新增] 开机自启动：系统启动时自动运行程序
+echo [新增] 自动登录：集成Sysinternals Autologon，LSA加密
+echo [新增] 启动软件管理：自定义开机启动的应用程序列表
+echo [新增] 配置加密：使用Windows DPAPI加密配置文件
+echo [优化] 安全性大幅提升：LSA加密 + AES-256
+echo [优化] 智能判断：区分系统开机和睡眠唤醒
+echo.
+echo 详细更新内容请查看 RELEASE_NOTES_v%version%.md
 echo.
 ) > "%release_dir%\更新日志.txt"
 

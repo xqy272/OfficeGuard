@@ -2,12 +2,12 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 
-A powerful Windows system optimization tool for performance enhancement
+A powerful Windows system optimization tool with scheduling, auto-startup, auto-logon, and encrypted configuration
 
 [English](README.md) | [简体中文](README_zh.md)
 
@@ -15,16 +15,29 @@ A powerful Windows system optimization tool for performance enhancement
 
 ## ✨ Key Features
 
-### 🕒 Scheduled Tasks
+### ⏱️ Scheduled Tasks
 - **Scheduled Shutdown/Sleep**: Set countdown timers for automatic system shutdown or sleep
 - **Smart Grace Period**: Provides buffer time before execution - move mouse to cancel
 - **Safe Control**: Close the app to cancel all tasks anytime
+- **Visual Progress**: Real-time countdown and progress bar
 
-### 🛡️ System Lock
-- **Complete Lock**: Kernel-level keyboard and mouse blocking, including Win key, Alt+Tab, etc.
-- **Physical Restriction**: Confines mouse to a small area to prevent accidental operations
-- **Password Protection**: Can only be unlocked with the correct password
-- **Prevent Sleep**: Keeps screen active during lock
+### ⚡ System Optimization
+- **Deep Optimization**: Optimize system performance and clear memory fragmentation
+- **Global Hotkey**: Customizable hotkey (default Ctrl+Alt+L)
+- **System Tray**: Run silently in background, always accessible
+- **Password Protection**: Requires password to restore after optimization
+
+### 🚀 Auto-Startup System
+- **Boot Auto-Start**: Automatically run program on system startup
+- **Auto-Login**: Integrated Sysinternals Autologon with LSA encryption
+- **Startup Manager**: Customize list of applications to launch on boot
+- **Smart Detection**: Distinguish between boot and sleep wake-up
+
+### 🔒 Security Protection
+- **Config Encryption**: Encrypt configuration files using Windows DPAPI
+- **User Binding**: Only current user can decrypt configuration
+- **LSA Encryption**: Auto-login password uses system-level encryption
+- **Secure Storage**: All sensitive information encrypted
 
 ## 📥 Quick Start
 

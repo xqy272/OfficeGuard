@@ -6,6 +6,7 @@ import json
 import math
 import logging
 import atexit
+import base64
 from pathlib import Path
 
 # GUI相关
@@ -117,6 +118,114 @@ def setup_logging():
 logger = setup_logging()
 
 # ==========================================
+#      3. 配置文件加密
+# ==========================================
+def encrypt_data(data_str):
+    """
+    使用Windows DPAPI加密数据
+    DPAPI（Data Protection API）使用用户凭据加密，只有当前用户可以解密
+    :param data_str: 要加密的字符串
+    :return: Base64编码的加密数据
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        # 定义DPAPI结构
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [
+                ('cbData', wintypes.DWORD),
+                ('pbData', ctypes.POINTER(ctypes.c_char))
+            ]
+        
+        # 转换为字节
+        data_bytes = data_str.encode('utf-8')
+        
+        # 输入数据
+        blob_in = DATA_BLOB()
+        blob_in.cbData = len(data_bytes)
+        blob_in.pbData = ctypes.cast(ctypes.c_char_p(data_bytes), ctypes.POINTER(ctypes.c_char))
+        
+        # 输出数据
+        blob_out = DATA_BLOB()
+        
+        # 调用CryptProtectData
+        crypt32 = ctypes.windll.crypt32
+        if crypt32.CryptProtectData(
+            ctypes.byref(blob_in),
+            None,  # 描述
+            None,  # 可选熵
+            None,  # 保留
+            None,  # 提示结构
+            0,     # 标志
+            ctypes.byref(blob_out)
+        ):
+            # 获取加密数据
+            encrypted_bytes = ctypes.string_at(blob_out.pbData, blob_out.cbData)
+            # 释放内存
+            kernel32.LocalFree(blob_out.pbData)
+            # Base64编码
+            return base64.b64encode(encrypted_bytes).decode('ascii')
+        else:
+            logger.error("加密失败")
+            return None
+    except Exception as e:
+        logger.error(f"数据加密异常: {e}")
+        return None
+
+def decrypt_data(encrypted_str):
+    """
+    使用Windows DPAPI解密数据
+    :param encrypted_str: Base64编码的加密数据
+    :return: 解密后的字符串
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        # 定义DPAPI结构
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [
+                ('cbData', wintypes.DWORD),
+                ('pbData', ctypes.POINTER(ctypes.c_char))
+            ]
+        
+        # Base64解码
+        encrypted_bytes = base64.b64decode(encrypted_str)
+        
+        # 输入数据
+        blob_in = DATA_BLOB()
+        blob_in.cbData = len(encrypted_bytes)
+        blob_in.pbData = ctypes.cast(ctypes.c_char_p(encrypted_bytes), ctypes.POINTER(ctypes.c_char))
+        
+        # 输出数据
+        blob_out = DATA_BLOB()
+        
+        # 调用CryptUnprotectData
+        crypt32 = ctypes.windll.crypt32
+        if crypt32.CryptUnprotectData(
+            ctypes.byref(blob_in),
+            None,  # 描述
+            None,  # 可选熵
+            None,  # 保留
+            None,  # 提示结构
+            0,     # 标志
+            ctypes.byref(blob_out)
+        ):
+            # 获取解密数据
+            decrypted_bytes = ctypes.string_at(blob_out.pbData, blob_out.cbData)
+            # 释放内存
+            kernel32.LocalFree(blob_out.pbData)
+            # 转换为字符串
+            return decrypted_bytes.decode('utf-8')
+        else:
+            logger.error("解密失败")
+            return None
+    except Exception as e:
+        logger.error(f"数据解密异常: {e}")
+        return None
+
+# ==========================================
 #      0. 权限与优先级配置
 # ==========================================
 def run_as_admin():
@@ -198,7 +307,13 @@ class ConfigManager:
             "hotkey_ctrl": True,  # Ctrl键
             "hotkey_alt": True,  # Alt键
             "hotkey_shift": False,  # Shift键
-            "hotkey_key": "L"  # 主键
+            "hotkey_key": "L",  # 主键
+            "autostart_enabled": False,  # 开机自启动
+            "autologon_enabled": False,  # 自动登录
+            "autologon_username": "",  # 自动登录用户名
+            "autologon_password": "",  # 自动登录密码
+            "autologon_domain": ".",  # 自动登录域名（.表示本机）
+            "startup_apps": []  # 开机启动的软件列表 [{"name": "软件名", "path": "路径", "enabled": True}]
         }
         self.data = self.load()
         
@@ -211,28 +326,72 @@ class ConfigManager:
         self.save()
 
     def load(self):
-        """加载配置文件"""
+        """加载配置文件（支持加密）"""
         if not os.path.exists(self.filename):
             logger.info("配置文件不存在，使用默认配置")
             return self.defaults.copy()
         try:
             with open(self.filename, 'r', encoding='utf-8') as f:
-                saved = json.load(f)
+                content = f.read().strip()
+                
+                # 检查是否是加密的配置文件
+                if content.startswith('ENCRYPTED:'):
+                    # 加密格式：ENCRYPTED:base64_encrypted_data
+                    encrypted_data = content[10:]  # 去掉"ENCRYPTED:"前缀
+                    decrypted_json = decrypt_data(encrypted_data)
+                    
+                    if decrypted_json:
+                        saved = json.loads(decrypted_json)
+                        logger.debug(f"加密配置已从 {self.filename} 加载并解密")
+                    else:
+                        logger.error("配置文件解密失败，使用默认配置")
+                        return self.defaults.copy()
+                else:
+                    # 兼容旧的未加密配置文件
+                    saved = json.loads(content)
+                    logger.debug(f"配置已从 {self.filename} 加载（未加密）")
+                    # 标记需要升级为加密格式
+                    logger.info("检测到未加密的配置文件，将在下次保存时自动加密")
+                
                 # 合并缺省值
                 for k, v in self.defaults.items():
                     if k not in saved:
                         saved[k] = v
-                logger.debug(f"配置已从 {self.filename} 加载")
+                
                 return saved
         except Exception as e:
             logger.error(f"配置文件加载失败: {e}")
             return self.defaults.copy()
 
-    def save(self):
+    def save(self, encrypt=True):
+        """
+        保存配置文件
+        :param encrypt: 是否加密保存（默认True）
+        """
         try:
-            with open(self.filename, 'w', encoding='utf-8') as f:
-                json.dump(self.data, f, indent=4, ensure_ascii=False)
-            logger.debug("配置已保存")
+            # 将配置转换为JSON字符串
+            json_str = json.dumps(self.data, indent=4, ensure_ascii=False)
+            
+            if encrypt:
+                # 加密配置数据
+                encrypted_data = encrypt_data(json_str)
+                
+                if encrypted_data:
+                    # 保存加密数据（添加标识前缀）
+                    with open(self.filename, 'w', encoding='utf-8') as f:
+                        f.write(f"ENCRYPTED:{encrypted_data}")
+                    logger.debug("配置已加密保存")
+                else:
+                    logger.error("配置加密失败，保存为未加密格式")
+                    # 降级为未加密保存
+                    with open(self.filename, 'w', encoding='utf-8') as f:
+                        f.write(json_str)
+            else:
+                # 未加密保存（仅用于调试）
+                with open(self.filename, 'w', encoding='utf-8') as f:
+                    f.write(json_str)
+                logger.debug("配置已保存（未加密）")
+                
         except Exception as e:
             logger.error(f"配置保存失败: {e}")
     
@@ -246,12 +405,229 @@ class ConfigManager:
             logger.warning(f"尝试设置未知配置项: {key}")
 
 # ==========================================
+#      开机检测与自启动管理
+# ==========================================
+def is_system_boot():
+    """
+    判断是否是系统开机（非睡眠唤醒）
+    方法：检查系统运行时间，如果小于5分钟，认为是开机
+    """
+    try:
+        # 获取系统启动时间（单位：毫秒）
+        tick_count = kernel32.GetTickCount64()
+        # 转换为分钟
+        uptime_minutes = tick_count / 1000 / 60
+        
+        logger.info(f"系统运行时间: {uptime_minutes:.2f} 分钟")
+        
+        # 如果系统运行时间小于5分钟，认为是开机
+        return uptime_minutes < 5
+    except Exception as e:
+        logger.error(f"检测系统启动时间失败: {e}")
+        return False
+
+def set_autostart(enable, app_path=None):
+    """
+    设置开机自启动
+    :param enable: True=启用, False=禁用
+    :param app_path: 应用程序路径，如果为None则使用当前exe路径
+    """
+    try:
+        import winreg
+        
+        if app_path is None:
+            if is_frozen():
+                app_path = sys.executable
+            else:
+                app_path = os.path.abspath(__file__)
+        
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        app_name = "OfficeGuard"
+        
+        # 打开注册表键
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE)
+        
+        if enable:
+            # 添加启动项
+            winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{app_path}"')
+            logger.info(f"已添加开机自启动: {app_path}")
+        else:
+            # 删除启动项
+            try:
+                winreg.DeleteValue(key, app_name)
+                logger.info("已删除开机自启动")
+            except FileNotFoundError:
+                logger.info("启动项不存在，无需删除")
+        
+        winreg.CloseKey(key)
+        return True
+    except Exception as e:
+        logger.error(f"设置开机自启动失败: {e}")
+        return False
+
+def download_autologon():
+    """
+    下载Sysinternals Autologon工具
+    返回Autologon.exe的路径
+    """
+    try:
+        import urllib.request
+        import zipfile
+        import tempfile
+        
+        app_dir = get_app_data_dir()
+        tools_dir = app_dir / 'tools'
+        tools_dir.mkdir(parents=True, exist_ok=True)
+        
+        autologon_exe = tools_dir / 'Autologon.exe'
+        
+        # 如果已存在，直接返回
+        if autologon_exe.exists():
+            logger.info(f"Autologon工具已存在: {autologon_exe}")
+            return str(autologon_exe)
+        
+        # 下载Autologon
+        logger.info("正在下载Sysinternals Autologon...")
+        url = "https://live.sysinternals.com/Autologon.exe"
+        
+        # 下载到临时文件
+        temp_file = tools_dir / 'Autologon.exe.tmp'
+        urllib.request.urlretrieve(url, str(temp_file))
+        
+        # 重命名为正式文件
+        temp_file.rename(autologon_exe)
+        
+        logger.info(f"Autologon工具下载完成: {autologon_exe}")
+        return str(autologon_exe)
+        
+    except Exception as e:
+        logger.error(f"下载Autologon工具失败: {e}")
+        return None
+
+def set_autologon(enable, username="", password="", domain="."):
+    """
+    使用Sysinternals Autologon设置Windows自动登录
+    使用LSA加密存储密码，比直接写注册表更安全
+    需要管理员权限
+    :param enable: True=启用, False=禁用
+    :param username: 用户名
+    :param password: 密码
+    :param domain: 域名，默认为本机（.）
+    """
+    try:
+        import subprocess
+        
+        # 获取或下载Autologon工具
+        autologon_path = download_autologon()
+        
+        if not autologon_path:
+            logger.error("无法获取Autologon工具")
+            return False
+        
+        if enable:
+            # 启用自动登录
+            # Autologon.exe username domain password /accepteula
+            cmd = [
+                autologon_path,
+                username,
+                domain,
+                password,
+                '/accepteula'  # 自动接受许可协议
+            ]
+            
+            logger.info(f"正在配置自动登录，用户名: {username}")
+            
+            # 执行命令
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                creationflags=subprocess.CREATE_NO_WINDOW  # 不显示窗口
+            )
+            
+            if result.returncode == 0:
+                logger.info("自动登录已启用（使用LSA加密）")
+                return True
+            else:
+                logger.error(f"Autologon执行失败: {result.stderr}")
+                return False
+        else:
+            # 禁用自动登录
+            # 使用注册表方式清除
+            import winreg
+            key_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+            
+            try:
+                key = winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE,
+                    key_path,
+                    0,
+                    winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY
+                )
+                
+                # 禁用自动登录
+                winreg.SetValueEx(key, "AutoAdminLogon", 0, winreg.REG_SZ, "0")
+                
+                # 清理可能存在的明文密码
+                try:
+                    winreg.DeleteValue(key, "DefaultPassword")
+                except:
+                    pass
+                
+                winreg.CloseKey(key)
+                logger.info("自动登录已禁用")
+                return True
+            except Exception as e:
+                logger.error(f"禁用自动登录失败: {e}")
+                return False
+        
+    except Exception as e:
+        logger.error(f"设置自动登录失败: {e}")
+        return False
+
+def launch_startup_apps(app_list):
+    """
+    启动指定的应用程序列表
+    :param app_list: 应用程序列表 [{"name": "软件名", "path": "路径", "enabled": True}]
+    """
+    import subprocess
+    
+    launched = []
+    failed = []
+    
+    for app in app_list:
+        if not app.get("enabled", True):
+            continue
+        
+        app_path = app.get("path", "")
+        app_name = app.get("name", "未知")
+        
+        if not app_path or not os.path.exists(app_path):
+            logger.warning(f"应用程序不存在: {app_name} - {app_path}")
+            failed.append(app_name)
+            continue
+        
+        try:
+            # 启动应用程序
+            subprocess.Popen([app_path], shell=True)
+            logger.info(f"已启动应用程序: {app_name}")
+            launched.append(app_name)
+            # 延迟一下，避免同时启动太多程序
+            time.sleep(0.5)
+        except Exception as e:
+            logger.error(f"启动应用程序失败: {app_name} - {e}")
+            failed.append(app_name)
+    
+    return launched, failed
+
+# ==========================================
 #      主程序逻辑
 # ==========================================
 class OfficeGuardApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("系统优化助手 v1.2.0")
+        self.root.title("系统优化助手 v1.3.0")
         
         self.cfg = ConfigManager()
         
@@ -295,9 +671,16 @@ class OfficeGuardApp:
         # 创建系统托盘并隐藏窗口
         self.root.after(100, self.setup_tray_and_hide)
         
+        # 检测是否是开机启动
+        self.is_boot_startup = is_system_boot()
+        
         # 首次运行引导（在托盘创建后显示）
         if self.cfg.is_first_run:
             self.root.after(1000, self.show_first_run_guide)
+        
+        # 如果是开机启动，执行开机任务
+        if self.is_boot_startup:
+            self.root.after(2000, self.on_boot_startup)
 
     def show_first_run_guide(self):
         """显示首次运行引导"""
@@ -314,6 +697,7 @@ class OfficeGuardApp:
                 f"  • 本软件需要管理员权限\n"
                 f"  • 优化后需输入密码恢复\n"
                 f"  • 可在设置中自定义快捷键\n"
+                f"  • 配置文件已使用DPAPI加密保护\n"
             )
             
             # 显示窗口来弹出消息框
@@ -446,9 +830,99 @@ class OfficeGuardApp:
     
     def setup_settings_ui(self):
         """设置界面"""
+        # 创建滚动区域
+        canvas = tk.Canvas(self.tab_settings)
+        scrollbar = ttk.Scrollbar(self.tab_settings, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # 开机自启动设置
+        autostart_frame = tk.LabelFrame(scrollable_frame, text="开机设置", padx=15, pady=15)
+        autostart_frame.pack(fill="x", pady=10, padx=10)
+        
+        self.var_autostart = tk.BooleanVar(value=self.cfg.get("autostart_enabled"))
+        tk.Checkbutton(autostart_frame, text="开机自动启动本程序", variable=self.var_autostart).pack(anchor="w", pady=5)
+        
+        # AutoLogon设置
+        autologon_frame = tk.LabelFrame(autostart_frame, text="自动登录设置（需管理员权限）", padx=10, pady=10)
+        autologon_frame.pack(fill="x", pady=10)
+        
+        self.var_autologon = tk.BooleanVar(value=self.cfg.get("autologon_enabled"))
+        tk.Checkbutton(autologon_frame, text="启用开机自动登录（使用Sysinternals Autologon）", 
+                      variable=self.var_autologon).pack(anchor="w", pady=5)
+        
+        # 用户名
+        user_frame = tk.Frame(autologon_frame)
+        user_frame.pack(fill="x", pady=5)
+        tk.Label(user_frame, text="用户名:", width=10, anchor="e").pack(side=tk.LEFT)
+        self.entry_autologon_user = ttk.Entry(user_frame, width=20)
+        self.entry_autologon_user.pack(side=tk.LEFT, padx=5)
+        self.entry_autologon_user.insert(0, self.cfg.get("autologon_username"))
+        
+        # 密码
+        pwd_frame = tk.Frame(autologon_frame)
+        pwd_frame.pack(fill="x", pady=5)
+        tk.Label(pwd_frame, text="密码:", width=10, anchor="e").pack(side=tk.LEFT)
+        self.entry_autologon_pwd = ttk.Entry(pwd_frame, width=20, show="*")
+        self.entry_autologon_pwd.pack(side=tk.LEFT, padx=5)
+        self.entry_autologon_pwd.insert(0, self.cfg.get("autologon_password"))
+        
+        # 域名（可选）
+        domain_frame = tk.Frame(autologon_frame)
+        domain_frame.pack(fill="x", pady=5)
+        tk.Label(domain_frame, text="域名:", width=10, anchor="e").pack(side=tk.LEFT)
+        self.entry_autologon_domain = ttk.Entry(domain_frame, width=20)
+        self.entry_autologon_domain.pack(side=tk.LEFT, padx=5)
+        self.entry_autologon_domain.insert(0, self.cfg.get("autologon_domain", "."))
+        tk.Label(domain_frame, text="(本机用户填 . 即可)", fg="gray", font=("微软雅黑", 8)).pack(side=tk.LEFT, padx=5)
+        
+        tk.Label(autologon_frame, text="✅ 使用LSA加密存储密码，安全可靠\n⚠️ 首次使用会自动下载Sysinternals Autologon工具", 
+                fg="green", font=("微软雅黑", 8), justify="left").pack(anchor="w", pady=5)
+        
+        # 保存开机设置按钮
+        tk.Button(autostart_frame, text="💾 保存开机设置", bg="#27ae60", fg="white",
+                 command=self.save_autostart_settings).pack(fill="x", pady=10)
+        
+        # 启动软件列表管理
+        startup_apps_frame = tk.LabelFrame(scrollable_frame, text="开机启动软件管理", padx=15, pady=15)
+        startup_apps_frame.pack(fill="both", expand=True, pady=10, padx=10)
+        
+        # 软件列表
+        list_frame = tk.Frame(startup_apps_frame)
+        list_frame.pack(fill="both", expand=True, pady=5)
+        
+        # 创建列表和滚动条
+        list_scroll = ttk.Scrollbar(list_frame, orient="vertical")
+        self.startup_apps_listbox = tk.Listbox(list_frame, height=8, yscrollcommand=list_scroll.set)
+        list_scroll.config(command=self.startup_apps_listbox.yview)
+        self.startup_apps_listbox.pack(side="left", fill="both", expand=True)
+        list_scroll.pack(side="right", fill="y")
+        
+        # 加载已有的软件列表
+        self.refresh_startup_apps_list()
+        
+        # 按钮区域
+        btn_frame = tk.Frame(startup_apps_frame)
+        btn_frame.pack(fill="x", pady=5)
+        
+        tk.Button(btn_frame, text="➕ 添加软件", command=self.add_startup_app).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_frame, text="✏️ 编辑", command=self.edit_startup_app).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_frame, text="🗑️ 删除", command=self.remove_startup_app).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_frame, text="🔄 切换启用/禁用", command=self.toggle_startup_app).pack(side=tk.LEFT, padx=2)
+        
         # 快捷键设置
-        hotkey_frame = tk.LabelFrame(self.tab_settings, text="快捷键设置", padx=15, pady=15)
-        hotkey_frame.pack(fill="x", pady=10)
+        hotkey_frame = tk.LabelFrame(scrollable_frame, text="快捷键设置", padx=15, pady=15)
+        hotkey_frame.pack(fill="x", pady=10, padx=10)
         
         # 快捷键开关
         self.var_hotkey_enabled = tk.BooleanVar(value=self.cfg.get("hotkey_enabled"))
@@ -1252,6 +1726,223 @@ class OfficeGuardApp:
         self.install_hooks()
         self.trap_mouse()
         logger.info("通过快捷键激活系统优化")
+    
+    def on_boot_startup(self):
+        """处理开机启动任务"""
+        logger.info("检测到系统开机，执行开机任务...")
+        
+        try:
+            # 获取启动软件列表
+            startup_apps = self.cfg.get("startup_apps")
+            
+            if startup_apps:
+                logger.info(f"准备启动 {len(startup_apps)} 个应用程序...")
+                launched, failed = launch_startup_apps(startup_apps)
+                
+                # 显示启动结果（可选）
+                if launched or failed:
+                    msg = ""
+                    if launched:
+                        msg += f"✅ 已启动: {', '.join(launched)}\n"
+                    if failed:
+                        msg += f"❌ 启动失败: {', '.join(failed)}"
+                    
+                    logger.info(f"开机启动结果: {msg}")
+            else:
+                logger.info("没有配置开机启动软件")
+        except Exception as e:
+            logger.error(f"开机启动任务执行失败: {e}")
+    
+    def save_autostart_settings(self):
+        """保存开机设置"""
+        try:
+            # 保存开机自启动
+            autostart_enabled = self.var_autostart.get()
+            result = set_autostart(autostart_enabled)
+            
+            if result:
+                self.cfg.set("autostart_enabled", autostart_enabled)
+                
+                # 保存AutoLogon设置
+                autologon_enabled = self.var_autologon.get()
+                username = self.entry_autologon_user.get().strip()
+                password = self.entry_autologon_pwd.get().strip()
+                domain = self.entry_autologon_domain.get().strip() or "."
+                
+                if autologon_enabled:
+                    if not username:
+                        messagebox.showwarning("警告", "请输入用户名")
+                        return
+                    
+                    if not password:
+                        messagebox.showwarning("警告", "请输入密码")
+                        return
+                    
+                    # 显示进度提示
+                    progress_msg = messagebox.showinfo("提示", "正在配置自动登录...\n首次使用会下载Autologon工具（约200KB）")
+                    
+                    result = set_autologon(True, username, password, domain)
+                    if result:
+                        self.cfg.set("autologon_enabled", True)
+                        self.cfg.set("autologon_username", username)
+                        self.cfg.set("autologon_password", password)
+                        self.cfg.set("autologon_domain", domain)
+                        messagebox.showinfo("成功", "开机设置已保存！\n自动登录已启用（LSA加密存储）。")
+                    else:
+                        messagebox.showerror("错误", "自动登录设置失败！\n请确保：\n1. 以管理员权限运行\n2. 网络连接正常（首次需下载工具）\n3. 用户名和密码正确")
+                        return
+                else:
+                    # 禁用自动登录
+                    set_autologon(False)
+                    self.cfg.set("autologon_enabled", False)
+                    messagebox.showinfo("成功", "开机设置已保存！\n自动登录已禁用。")
+                
+                self.cfg.save()
+                logger.info(f"开机设置已保存: 自启动={autostart_enabled}, 自动登录={autologon_enabled}")
+            else:
+                messagebox.showerror("错误", "开机自启动设置失败！")
+        except Exception as e:
+            logger.error(f"保存开机设置失败: {e}")
+            messagebox.showerror("错误", f"保存失败：{e}")
+    
+    def refresh_startup_apps_list(self):
+        """刷新启动软件列表显示"""
+        self.startup_apps_listbox.delete(0, tk.END)
+        startup_apps = self.cfg.get("startup_apps")
+        
+        for app in startup_apps:
+            name = app.get("name", "未知")
+            enabled = app.get("enabled", True)
+            status = "✓" if enabled else "✗"
+            self.startup_apps_listbox.insert(tk.END, f"{status} {name}")
+    
+    def add_startup_app(self):
+        """添加启动软件"""
+        from tkinter import filedialog
+        
+        # 选择文件
+        file_path = filedialog.askopenfilename(
+            title="选择要启动的软件",
+            filetypes=[("可执行文件", "*.exe"), ("所有文件", "*.*")]
+        )
+        
+        if file_path:
+            # 获取文件名
+            name = os.path.basename(file_path)
+            
+            # 添加到列表
+            startup_apps = self.cfg.get("startup_apps")
+            startup_apps.append({
+                "name": name,
+                "path": file_path,
+                "enabled": True
+            })
+            
+            self.cfg.set("startup_apps", startup_apps)
+            self.cfg.save()
+            
+            self.refresh_startup_apps_list()
+            logger.info(f"已添加启动软件: {name}")
+    
+    def edit_startup_app(self):
+        """编辑启动软件"""
+        selection = self.startup_apps_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("提示", "请先选择要编辑的软件")
+            return
+        
+        index = selection[0]
+        startup_apps = self.cfg.get("startup_apps")
+        app = startup_apps[index]
+        
+        # 创建编辑对话框
+        dialog = tk.Toplevel(self.root)
+        dialog.title("编辑启动软件")
+        dialog.geometry("400x150")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        tk.Label(dialog, text="软件名称:").grid(row=0, column=0, padx=10, pady=10, sticky="e")
+        entry_name = ttk.Entry(dialog, width=30)
+        entry_name.grid(row=0, column=1, padx=10, pady=10)
+        entry_name.insert(0, app.get("name", ""))
+        
+        tk.Label(dialog, text="软件路径:").grid(row=1, column=0, padx=10, pady=10, sticky="e")
+        entry_path = ttk.Entry(dialog, width=30)
+        entry_path.grid(row=1, column=1, padx=10, pady=10)
+        entry_path.insert(0, app.get("path", ""))
+        
+        def browse():
+            from tkinter import filedialog
+            file_path = filedialog.askopenfilename(
+                title="选择软件",
+                filetypes=[("可执行文件", "*.exe"), ("所有文件", "*.*")]
+            )
+            if file_path:
+                entry_path.delete(0, tk.END)
+                entry_path.insert(0, file_path)
+        
+        tk.Button(dialog, text="浏览", command=browse).grid(row=1, column=2, padx=5)
+        
+        def save():
+            name = entry_name.get().strip()
+            path = entry_path.get().strip()
+            
+            if not name or not path:
+                messagebox.showwarning("警告", "名称和路径不能为空")
+                return
+            
+            startup_apps[index]["name"] = name
+            startup_apps[index]["path"] = path
+            
+            self.cfg.set("startup_apps", startup_apps)
+            self.cfg.save()
+            self.refresh_startup_apps_list()
+            
+            dialog.destroy()
+            logger.info(f"已更新启动软件: {name}")
+        
+        tk.Button(dialog, text="保存", command=save, bg="#27ae60", fg="white").grid(row=2, column=1, pady=20)
+    
+    def remove_startup_app(self):
+        """删除启动软件"""
+        selection = self.startup_apps_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("提示", "请先选择要删除的软件")
+            return
+        
+        index = selection[0]
+        startup_apps = self.cfg.get("startup_apps")
+        app = startup_apps[index]
+        
+        result = messagebox.askyesno("确认", f"确定要删除 {app.get('name', '未知')} 吗？")
+        if result:
+            startup_apps.pop(index)
+            self.cfg.set("startup_apps", startup_apps)
+            self.cfg.save()
+            self.refresh_startup_apps_list()
+            logger.info(f"已删除启动软件: {app.get('name', '未知')}")
+    
+    def toggle_startup_app(self):
+        """切换启动软件的启用/禁用状态"""
+        selection = self.startup_apps_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("提示", "请先选择要切换的软件")
+            return
+        
+        index = selection[0]
+        startup_apps = self.cfg.get("startup_apps")
+        app = startup_apps[index]
+        
+        # 切换状态
+        app["enabled"] = not app.get("enabled", True)
+        
+        self.cfg.set("startup_apps", startup_apps)
+        self.cfg.save()
+        self.refresh_startup_apps_list()
+        
+        status = "启用" if app["enabled"] else "禁用"
+        logger.info(f"已{status}启动软件: {app.get('name', '未知')}")
 
 if __name__ == "__main__":
     logger.info("=" * 50)
