@@ -883,7 +883,10 @@ class OfficeGuardApp:
         tk.Label(domain_frame, text="域名:", width=10, anchor="e").pack(side=tk.LEFT)
         self.entry_autologon_domain = ttk.Entry(domain_frame, width=20)
         self.entry_autologon_domain.pack(side=tk.LEFT, padx=5)
-        self.entry_autologon_domain.insert(0, self.cfg.get("autologon_domain", "."))
+        domain_value = self.cfg.get("autologon_domain")
+        if not domain_value:
+            domain_value = "."
+        self.entry_autologon_domain.insert(0, domain_value)
         tk.Label(domain_frame, text="(本机用户填 . 即可)", fg="gray", font=("微软雅黑", 8)).pack(side=tk.LEFT, padx=5)
         
         tk.Label(autologon_frame, text="✅ 使用LSA加密存储密码，安全可靠\n⚠️ 首次使用会自动下载Sysinternals Autologon工具", 
@@ -1390,19 +1393,21 @@ class OfficeGuardApp:
                     
                     # 屏蔽所有其他按键
                     return 1
-                return user32.CallNextHookEx(self.h_kb_hook, nCode, wParam, lParam)
+                # 不处理的情况，传递给下一个钩子
+                return 0
             except Exception as e:
                 logger.error(f"键盘钩子异常: {e}")
-                return user32.CallNextHookEx(self.h_kb_hook, nCode, wParam, lParam)
+                # 发生错误时也要返回0而不是调用CallNextHookEx
+                return 0
 
         def ms_callback(nCode, wParam, lParam):
             try:
                 if nCode >= 0:
                     return 1  # 屏蔽所有鼠标事件
-                return user32.CallNextHookEx(self.h_ms_hook, nCode, wParam, lParam)
+                return 0
             except Exception as e:
                 logger.error(f"鼠标钩子异常: {e}")
-                return user32.CallNextHookEx(self.h_ms_hook, nCode, wParam, lParam)
+                return 0
 
         try:
             self.kb_proc_ref = HOOKPROC(kb_callback)
