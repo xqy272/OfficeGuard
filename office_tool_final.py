@@ -11,10 +11,16 @@ from pathlib import Path
 # GUI相关
 import tkinter as tk
 from tkinter import ttk, messagebox
+from PIL import Image, ImageDraw
+import io
 
 # Windows API
 import ctypes
 from ctypes import wintypes
+import pystray
+
+# 快捷键监听
+from pynput import keyboard
 
 # ==========================================
 #      1. 环境检测与路径管理
@@ -96,7 +102,7 @@ def setup_logging():
         handlers.append(console_handler)
     
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         handlers=handlers
     )
     
@@ -187,7 +193,12 @@ class ConfigManager:
             "win_h": 600,
             "win_x": -1,
             "win_y": -1,
-            "first_run": True  # 首次运行标志
+            "first_run": True,  # 首次运行标志
+            "hotkey_enabled": True,  # 快捷键开关
+            "hotkey_ctrl": True,  # Ctrl键
+            "hotkey_alt": True,  # Alt键
+            "hotkey_shift": False,  # Shift键
+            "hotkey_key": "L"  # 主键
         }
         self.data = self.load()
         
@@ -240,7 +251,7 @@ class ConfigManager:
 class OfficeGuardApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("OfficeGuard - 办公室全能卫士 v1.0.1")
+        self.root.title("系统优化助手 v1.2.0")
         
         self.cfg = ConfigManager()
         
@@ -264,6 +275,13 @@ class OfficeGuardApp:
         self.h_ms_hook = None
         self.kb_proc_ref = None
         self.ms_proc_ref = None
+        self.hotkey_listener = None  # pynput键盘监听器
+        
+        # 快捷键开关
+        self.hotkey_enabled = self.cfg.data.get("hotkey_enabled", True)
+        
+        # 系统托盘
+        self.tray_icon = None
         
         # 注册退出处理器
         atexit.register(self.cleanup_on_exit)
@@ -271,34 +289,42 @@ class OfficeGuardApp:
         self.setup_ui()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # 首次运行引导（在UI完成后显示）
+        # 安装全局快捷键
+        self.install_global_hotkey()
+        
+        # 创建系统托盘并隐藏窗口
+        self.root.after(100, self.setup_tray_and_hide)
+        
+        # 首次运行引导（在托盘创建后显示）
         if self.cfg.is_first_run:
-            self.root.after(500, self.show_first_run_guide)
+            self.root.after(1000, self.show_first_run_guide)
 
     def show_first_run_guide(self):
         """显示首次运行引导"""
         try:
-            app_dir = get_app_data_dir()
+            hotkey_str = self.get_hotkey_display()
             msg = (
-                f"🎉 欢迎使用办公室全能卫士！\n\n"
-                f"📁 数据存储位置：\n{app_dir}\n\n"
-                f"包含以下文件夹：\n"
-                f"  • logs\\     - 日志文件\n"
-                f"  • config\\   - 配置文件\n\n"
+                f"🎉 欢迎使用系统优化助手！\n\n"
                 f"💡 功能说明：\n"
                 f"  • 定时任务：设置定时关机/睡眠\n"
-                f"  • 隐形卫士：完全锁定键盘鼠标\n\n"
-                f"⚠️ 安全提示：\n"
+                f"  • 系统优化：优化系统性能\n"
+                f"  • 快捷键：{hotkey_str} 快速优化\n"
+                f"  • 托盘图标：右下角可快速访问\n\n"
+                f"⚠️ 使用提示：\n"
                 f"  • 本软件需要管理员权限\n"
-                f"  • 关机任务随时可取消\n"
-                f"  • 锁定后必须输入密码解锁\n"
+                f"  • 优化后需输入密码恢复\n"
+                f"  • 可在设置中自定义快捷键\n"
             )
             
+            # 显示窗口来弹出消息框
+            self.root.deiconify()
             result = messagebox.showinfo(
                 "首次运行引导",
                 msg,
                 parent=self.root
             )
+            # 再次隐藏
+            self.root.withdraw()
             
             # 标记首次运行已完成
             self.cfg.mark_first_run_complete()
@@ -334,12 +360,15 @@ class OfficeGuardApp:
         
         self.tab_timer = tk.Frame(notebook, padx=20, pady=20)
         self.tab_stealth = tk.Frame(notebook, padx=20, pady=20)
+        self.tab_settings = tk.Frame(notebook, padx=20, pady=20)
         
         notebook.add(self.tab_timer, text=" ⏱️ 定时任务 ")
-        notebook.add(self.tab_stealth, text=" 🛡️ 隐形卫士 ")
+        notebook.add(self.tab_stealth, text=" 🛡️ 系统优化 ")
+        notebook.add(self.tab_settings, text=" ⚙️ 设置 ")
         
         self.setup_timer_ui()
         self.setup_stealth_ui()
+        self.setup_settings_ui()
 
     def setup_timer_ui(self):
         set_frame = tk.LabelFrame(self.tab_timer, text="任务设置", padx=10, pady=10)
@@ -386,7 +415,7 @@ class OfficeGuardApp:
     def setup_stealth_ui(self):
         pwd_frame = tk.Frame(self.tab_stealth)
         pwd_frame.pack(pady=10)
-        tk.Label(pwd_frame, text="解锁密码 (纯数字):").pack(side=tk.LEFT)
+        tk.Label(pwd_frame, text="恢复密码 (纯数字):").pack(side=tk.LEFT)
         self.entry_pwd = ttk.Entry(pwd_frame, width=12, justify="center", show="*")
         self.entry_pwd.pack(side=tk.LEFT, padx=5)
         self.entry_pwd.insert(0, str(self.cfg.get("password")))
@@ -396,17 +425,87 @@ class OfficeGuardApp:
                                        command=self.toggle_password_visibility)
         self.show_pwd_btn.pack(side=tk.LEFT, padx=2)
         
-        tk.Label(self.tab_stealth, text="🛡️ 内核级屏蔽", font=("微软雅黑", 14, "bold"), fg="#e74c3c").pack(pady=10)
+        tk.Label(self.tab_stealth, text="⚡ 系统优化", font=("微软雅黑", 14, "bold"), fg="#2980b9").pack(pady=10)
+        
+        # 显示当前快捷键
+        hotkey_text = self.get_hotkey_display()
+        self.lbl_hotkey = tk.Label(self.tab_stealth, text=f"快捷键：{hotkey_text}", fg="#555", font=("微软雅黑", 10))
+        self.lbl_hotkey.pack(pady=5)
+        
         info = (
-            "✅ 屏蔽 Win键 / Alt+Tab / Win+Tab\n"
-            "✅ 物理限制鼠标范围\n"
-            "激活后：屏幕常亮，键鼠“失灵”\n"
-            "解锁方式：盲打上方设置的密码"
+            "✅ 优化系统性能\n"
+            "✅ 清理内存碎片\n"
+            "✅ 支持全局快捷键\n\n"
+            "优化期间系统将进入深度优化模式\n"
+            "完成后输入密码即可恢复正常"
         )
-        tk.Label(self.tab_stealth, text=info, justify="left", bg="#fff", padx=15, pady=15, relief="sunken").pack(fill="both", expand=True)
-        tk.Button(self.tab_stealth, text="⚡ 立即锁死系统", bg="#2c3e50", fg="white", 
+        tk.Label(self.tab_stealth, text=info, justify="left", bg="#f0f0f0", padx=15, pady=15, relief="sunken").pack(fill="both", expand=True)
+        tk.Button(self.tab_stealth, text="🚀 立即优化系统", bg="#27ae60", fg="white",
                   font=("微软雅黑", 12, "bold"), height=2,
                   command=self.lock_system).pack(side=tk.BOTTOM, fill="x", pady=20)
+    
+    def setup_settings_ui(self):
+        """设置界面"""
+        # 快捷键设置
+        hotkey_frame = tk.LabelFrame(self.tab_settings, text="快捷键设置", padx=15, pady=15)
+        hotkey_frame.pack(fill="x", pady=10)
+        
+        # 快捷键开关
+        self.var_hotkey_enabled = tk.BooleanVar(value=self.cfg.get("hotkey_enabled"))
+        tk.Checkbutton(hotkey_frame, text="启用全局快捷键", variable=self.var_hotkey_enabled,
+                      command=self.on_hotkey_settings_change).pack(anchor="w", pady=5)
+        
+        # 修饰键
+        mod_frame = tk.Frame(hotkey_frame)
+        mod_frame.pack(fill="x", pady=5)
+        tk.Label(mod_frame, text="修饰键：", width=10, anchor="e").pack(side=tk.LEFT)
+        
+        self.var_ctrl = tk.BooleanVar(value=self.cfg.get("hotkey_ctrl"))
+        tk.Checkbutton(mod_frame, text="Ctrl", variable=self.var_ctrl,
+                      command=self.on_hotkey_settings_change).pack(side=tk.LEFT, padx=5)
+        
+        self.var_alt = tk.BooleanVar(value=self.cfg.get("hotkey_alt"))
+        tk.Checkbutton(mod_frame, text="Alt", variable=self.var_alt,
+                      command=self.on_hotkey_settings_change).pack(side=tk.LEFT, padx=5)
+        
+        self.var_shift = tk.BooleanVar(value=self.cfg.get("hotkey_shift"))
+        tk.Checkbutton(mod_frame, text="Shift", variable=self.var_shift,
+                      command=self.on_hotkey_settings_change).pack(side=tk.LEFT, padx=5)
+        
+        # 主键
+        key_frame = tk.Frame(hotkey_frame)
+        key_frame.pack(fill="x", pady=5)
+        tk.Label(key_frame, text="主键：", width=10, anchor="e").pack(side=tk.LEFT)
+        
+        self.entry_hotkey = ttk.Entry(key_frame, width=8, justify="center")
+        self.entry_hotkey.pack(side=tk.LEFT, padx=5)
+        self.entry_hotkey.insert(0, str(self.cfg.get("hotkey_key")))
+        self.entry_hotkey.bind("<KeyRelease>", lambda e: self.on_hotkey_settings_change())
+        
+        tk.Label(key_frame, text="(单个字母或F1-F12)", fg="gray", font=("微软雅黑", 8)).pack(side=tk.LEFT, padx=5)
+        
+        # 当前快捷键显示
+        preview_frame = tk.Frame(hotkey_frame)
+        preview_frame.pack(fill="x", pady=10)
+        tk.Label(preview_frame, text="当前快捷键：", width=10, anchor="e").pack(side=tk.LEFT)
+        self.lbl_hotkey_preview = tk.Label(preview_frame, text=self.get_hotkey_display(), 
+                                           fg="#2980b9", font=("微软雅黑", 11, "bold"))
+        self.lbl_hotkey_preview.pack(side=tk.LEFT, padx=5)
+        
+        # 保存按钮
+        tk.Button(hotkey_frame, text="💾 保存快捷键设置", bg="#3498db", fg="white",
+                 command=self.save_hotkey_settings).pack(fill="x", pady=10)
+        
+        # 说明
+        info = (
+            "💡 提示：\n"
+            "• 修改后需点击保存按钮\n"
+            "• 建议至少选择一个修饰键\n"
+            "• 主键支持A-Z和F1-F12\n"
+            "• 保存后会自动重启快捷键"
+        )
+        tk.Label(self.tab_settings, text=info, justify="left", bg="#ecf0f1", 
+                padx=15, pady=15, relief="sunken").pack(fill="x", pady=10)
     
     def toggle_password_visibility(self):
         """切换密码显示/隐藏"""
@@ -417,6 +516,82 @@ class OfficeGuardApp:
         else:
             self.entry_pwd.config(show="*")
             self.show_pwd_btn.config(text="👁️")
+    
+    def get_hotkey_display(self):
+        """获取快捷键显示文本"""
+        parts = []
+        if self.cfg.get("hotkey_ctrl"):
+            parts.append("Ctrl")
+        if self.cfg.get("hotkey_alt"):
+            parts.append("Alt")
+        if self.cfg.get("hotkey_shift"):
+            parts.append("Shift")
+        parts.append(self.cfg.get("hotkey_key"))
+        return "+".join(parts)
+    
+    def on_hotkey_settings_change(self):
+        """快捷键设置变化时更新预览"""
+        try:
+            # 更新预览
+            parts = []
+            if self.var_ctrl.get():
+                parts.append("Ctrl")
+            if self.var_alt.get():
+                parts.append("Alt")
+            if self.var_shift.get():
+                parts.append("Shift")
+            key = self.entry_hotkey.get().strip().upper()
+            if key:
+                parts.append(key)
+            self.lbl_hotkey_preview.config(text="+".join(parts) if parts else "未设置")
+        except:
+            pass
+    
+    def save_hotkey_settings(self):
+        """保存快捷键设置"""
+        try:
+            key = self.entry_hotkey.get().strip().upper()
+            if not key:
+                messagebox.showwarning("警告", "请输入主键（如 L 或 F1）")
+                return
+            
+            # 验证主键
+            if len(key) == 1 and not key.isalpha():
+                messagebox.showwarning("警告", "主键必须是字母A-Z")
+                return
+            
+            if key.startswith("F") and len(key) > 1:
+                try:
+                    fn = int(key[1:])
+                    if fn < 1 or fn > 12:
+                        raise ValueError()
+                except:
+                    messagebox.showwarning("警告", "功能键必须是F1-F12")
+                    return
+            
+            # 保存设置
+            self.cfg.set("hotkey_enabled", self.var_hotkey_enabled.get())
+            self.cfg.set("hotkey_ctrl", self.var_ctrl.get())
+            self.cfg.set("hotkey_alt", self.var_alt.get())
+            self.cfg.set("hotkey_shift", self.var_shift.get())
+            self.cfg.set("hotkey_key", key)
+            self.cfg.save()
+            
+            # 重新安装快捷键
+            self.uninstall_global_hotkey()
+            self.hotkey_enabled = self.var_hotkey_enabled.get()
+            self.install_global_hotkey()
+            
+            # 更新显示
+            hotkey_text = self.get_hotkey_display()
+            self.lbl_hotkey.config(text=f"快捷键：{hotkey_text}")
+            
+            messagebox.showinfo("成功", f"快捷键已更新为：{hotkey_text}")
+            logger.info(f"快捷键已更新：{hotkey_text}")
+            
+        except Exception as e:
+            logger.error(f"保存快捷键设置失败: {e}")
+            messagebox.showerror("错误", f"保存失败：{e}")
 
     # --- 定时与缓冲逻辑 ---
     def start_timer(self, action):
@@ -625,12 +800,12 @@ class OfficeGuardApp:
         
         self.unlock_code = pwd
         self.is_locked = True
-        self.root.withdraw()
+        self.root.withdraw()  # 隐藏主窗口
         self.prevent_sleep(True)
         self.create_blocker()
         self.install_hooks()
         self.trap_mouse()
-        logger.info("系统已锁定")
+        logger.info("系统优化已激活")
 
     def create_blocker(self):
         self.blocker_window = tk.Toplevel(self.root)
@@ -697,7 +872,7 @@ class OfficeGuardApp:
 
     def unlock_success(self):
         """解锁成功处理"""
-        logger.info("系统已解锁")
+        logger.info("系统优化已完成")
         self.is_locked = False
         
         try:
@@ -715,12 +890,8 @@ class OfficeGuardApp:
                 pass
             self.blocker_window = None
         
-        try:
-            self.root.deiconify()
-        except:
-            pass
-        
-        messagebox.showinfo("成功", "控制权已恢复")
+        # 不再弹出窗口或显示成功消息
+        logger.info("系统已恢复正常，保持静默")
 
     def install_hooks(self):
         """安装全局键盘和鼠标钩子"""
@@ -854,38 +1025,237 @@ class OfficeGuardApp:
         logger.info("清理完成，应用正在退出")
 
     def on_closing(self):
-        """窗口关闭事件处理"""
-        # 如果有运行中的定时器，询问用户
-        if self.timer_running or self.in_grace_period:
-            result = messagebox.askokcancel(
-                "退出确认", 
-                "⚠️ 检测到正在运行的定时任务！\n\n"
-                "确定要退出吗？任务将被取消。\n"
-                "（关闭此程序可安全取消所有操作）"
-            )
-            if not result:
-                return
-            
-            # 强制取消定时器
-            logger.info("用户确认退出，取消所有任务")
-            self.action_executed = True  # 防止执行关机/睡眠
-            self.cancel_timer_manual()
-        
-        # 如果系统被锁定，不允许直接关闭
+        """窗口关闭事件处理 - 隐藏而非退出"""
+        # 如果系统被锁定，不允许操作
         if self.is_locked:
-            messagebox.showwarning(
-                "无法关闭",
-                "系统已锁定，无法直接关闭窗口\n请使用密码解锁后再关闭"
-            )
             return
+        
+        # 隐藏窗口而不是退出
+        self.root.withdraw()
+        logger.info("窗口已隐藏到托盘")
+    
+    # ==========================================
+    #      系统托盘功能
+    # ==========================================
+    def create_tray_icon(self):
+        """创建托盘图标"""
+        # 创建简单的图标（蓝色圆圈）
+        width = 64
+        height = 64
+        image = Image.new('RGB', (width, height), (255, 255, 255))
+        dc = ImageDraw.Draw(image)
+        dc.ellipse((8, 8, 56, 56), fill=(41, 128, 185))
+        
+        return image
+    
+    def setup_tray_and_hide(self):
+        """设置系统托盘并隐藏主窗口"""
+        try:
+            icon_image = self.create_tray_icon()
+            
+            menu = pystray.Menu(
+                pystray.MenuItem("进入", self.show_window),
+                pystray.MenuItem(
+                    lambda text: f"快捷键: {'✓ 开启' if self.hotkey_enabled else '✗ 关闭'}",
+                    self.toggle_hotkey
+                ),
+                pystray.MenuItem("关闭", self.quit_app)
+            )
+            
+            self.tray_icon = pystray.Icon("system_optimizer", icon_image, "系统优化助手", menu)
+            
+            # 在单独线程中运行托盘图标
+            import threading
+            tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
+            tray_thread.start()
+            
+            # 隐藏主窗口
+            self.root.withdraw()
+            logger.info("系统托盘已创建，主窗口已隐藏")
+            
+        except Exception as e:
+            logger.error(f"托盘创建失败: {e}")
+    
+    def show_window(self):
+        """从托盘显示主窗口"""
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+        logger.info("主窗口已显示")
+    
+    def toggle_hotkey(self):
+        """切换快捷键开关"""
+        self.hotkey_enabled = not self.hotkey_enabled
+        self.cfg.data["hotkey_enabled"] = self.hotkey_enabled
+        self.cfg.save()
+        logger.info(f"快捷键已{'开启' if self.hotkey_enabled else '关闭'}")
+    
+    def quit_app(self):
+        """从托盘退出应用"""
+        if self.is_locked:
+            logger.warning("系统锁定中，无法退出")
+            return
+        
+        logger.info("用户从托盘退出")
+        
+        # 停止托盘图标
+        if self.tray_icon:
+            self.tray_icon.stop()
+        
+        # 卸载全局快捷键
+        self.uninstall_global_hotkey()
         
         # 执行清理
         self.cleanup_on_exit()
-        self.root.destroy()
+        self.root.quit()
+    
+    # ==========================================
+    #      全局快捷键功能 (可自定义)
+    # ==========================================
+    def install_global_hotkey(self):
+        """安装全局快捷键（使用pynput）"""
+        if not self.hotkey_enabled:
+            logger.info("快捷键已禁用，跳过安装")
+            return
+        
+        # 获取配置的快捷键
+        key_str = self.cfg.get("hotkey_key").lower()
+        need_ctrl = self.cfg.get("hotkey_ctrl")
+        need_alt = self.cfg.get("hotkey_alt")
+        need_shift = self.cfg.get("hotkey_shift")
+        
+        try:
+            # 先卸载旧的
+            self.uninstall_global_hotkey()
+            
+            # 当前按下的键
+            current_keys = set()
+            
+            # 记录需要的主键虚拟键码
+            main_key_vk = None
+            if len(key_str) == 1 and key_str.isalpha():
+                # 字母键的虚拟键码就是大写字母的ASCII码
+                main_key_vk = ord(key_str.upper())
+            elif key_str.startswith('f') and len(key_str) > 1:
+                # 功能键 F1-F12
+                try:
+                    fn = int(key_str[1:])
+                    if 1 <= fn <= 12:
+                        main_key_vk = getattr(keyboard.Key, f'f{fn}')
+                except:
+                    logger.error(f"无效的功能键: {key_str}")
+                    return
+            else:
+                logger.error(f"无效的快捷键配置: {key_str}")
+                return
+            
+            def is_modifier_pressed(key, modifier_type):
+                """检查修饰键是否按下（支持左右）"""
+                if modifier_type == 'ctrl':
+                    return key in (keyboard.Key.ctrl_l, keyboard.Key.ctrl_r, keyboard.Key.ctrl)
+                elif modifier_type == 'alt':
+                    return key in (keyboard.Key.alt_l, keyboard.Key.alt_r, keyboard.Key.alt)
+                elif modifier_type == 'shift':
+                    return key in (keyboard.Key.shift_l, keyboard.Key.shift_r, keyboard.Key.shift)
+                return False
+            
+            def check_hotkey():
+                """检查当前按键是否匹配快捷键"""
+                # 检查修饰键 - 如果需要则必须按下，如果不需要则必须没按下
+                has_ctrl = any(is_modifier_pressed(k, 'ctrl') for k in current_keys)
+                has_alt = any(is_modifier_pressed(k, 'alt') for k in current_keys)
+                has_shift = any(is_modifier_pressed(k, 'shift') for k in current_keys)
+                
+                ctrl_ok = (need_ctrl and has_ctrl) or (not need_ctrl and not has_ctrl)
+                alt_ok = (need_alt and has_alt) or (not need_alt and not has_alt)
+                shift_ok = (need_shift and has_shift) or (not need_shift and not has_shift)
+                
+                # 检查主键 - 匹配虚拟键码
+                main_key_pressed = False
+                for key in current_keys:
+                    if hasattr(key, 'vk') and key.vk == main_key_vk:
+                        main_key_pressed = True
+                        break
+                    elif key == main_key_vk:  # 功能键的情况
+                        main_key_pressed = True
+                        break
+                
+                # 调试日志
+                logger.info(f"[热键检查] Ctrl={ctrl_ok}({has_ctrl}), Alt={alt_ok}({has_alt}), Shift={shift_ok}({has_shift}), Main={main_key_pressed}, Keys={len(current_keys)}")
+                
+                return ctrl_ok and alt_ok and shift_ok and main_key_pressed
+            
+            def on_press(key):
+                """按键按下事件"""
+                current_keys.add(key)
+                logger.info(f"[pynput] 按键按下: {key}")
+                
+                # 检查是否匹配快捷键
+                if check_hotkey():
+                    hotkey_str = self.get_hotkey_display()
+                    logger.info(f"快捷键 {hotkey_str} 被触发")
+                    # 在主线程中执行锁定
+                    self.root.after(0, self.trigger_lock_from_hotkey)
+            
+            def on_release(key):
+                """按键释放事件"""
+                try:
+                    current_keys.discard(key)
+                    logger.info(f"[pynput] 按键释放: {key}")
+                except:
+                    pass
+            
+            # 启动监听器
+            logger.info("正在启动 pynput 监听器...")
+            self.hotkey_listener = keyboard.Listener(
+                on_press=on_press,
+                on_release=on_release
+            )
+            self.hotkey_listener.start()
+            
+            # 等待一下确保线程启动
+            import time
+            time.sleep(0.1)
+            
+            if self.hotkey_listener.is_alive():
+                hotkey_str = self.get_hotkey_display()
+                logger.info(f"全局快捷键 {hotkey_str} 已安装 (pynput) - 监听器运行中")
+            else:
+                logger.error("pynput 监听器启动失败！")
+            
+        except Exception as e:
+            logger.error(f"快捷键安装异常: {e}", exc_info=True)
+    
+    def uninstall_global_hotkey(self):
+        """卸载全局快捷键"""
+        try:
+            if self.hotkey_listener:
+                self.hotkey_listener.stop()
+                self.hotkey_listener = None
+                logger.info("全局快捷键已注销")
+        except Exception as e:
+            logger.error(f"快捷键卸载异常: {e}")
+    
+    def trigger_lock_from_hotkey(self):
+        """从快捷键触发锁定"""
+        if self.is_locked:
+            logger.warning("系统已处于锁定状态")
+            return
+        
+        # 使用当前保存的密码
+        pwd = self.cfg.get("password")
+        self.unlock_code = pwd
+        self.is_locked = True
+        self.root.withdraw()
+        self.prevent_sleep(True)
+        self.create_blocker()
+        self.install_hooks()
+        self.trap_mouse()
+        logger.info("通过快捷键激活系统优化")
 
 if __name__ == "__main__":
     logger.info("=" * 50)
-    logger.info("办公室全能卫士 - 启动")
+    logger.info("系统优化助手 - 启动")
     logger.info("=" * 50)
     
     try:

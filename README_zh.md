@@ -1,13 +1,13 @@
-# OfficeGuard - 办公室全能卫士
+# 系统优化助手 (System Optimizer)
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
-![Python](https://img.shields.io/badge/python-3.7+-green.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
+![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 
-一款功能强大的 Windows 系统管理工具，提供定时任务和系统锁定功能
+一款功能强大的 Windows 系统优化工具，提供系统性能优化功能
 
 [简体中文](README_zh.md) | [English](README.md)
 
@@ -15,16 +15,17 @@
 
 ## ✨ 主要特性
 
-### 🕒 定时任务
-- **定时关机/睡眠**: 设置倒计时自动执行系统关机或睡眠
-- **智能缓冲期**: 执行前提供缓冲时间，移动鼠标即可取消
-- **安全机制**: 关闭应用即可取消所有任务，完全可控
+### ⚡ 系统优化
+- **深度优化**: 优化系统性能，清理内存碎片
+- **全局快捷键**: Ctrl+Alt+L 快速启动优化
+- **系统托盘**: 静默运行于后台，随时可用
+- **密码保护**: 优化完成后需输入密码恢复
 
-### 🛡️ 系统锁定
-- **完全锁定**: 内核级键盘鼠标屏蔽，包括 Win键、Alt+Tab 等组合键
-- **物理限制**: 限制鼠标活动范围，防止误操作
-- **密码保护**: 只能通过输入正确密码解锁
-- **防止休眠**: 锁定期间保持屏幕常亮
+### 🎯 隐蔽运行
+- **托盘图标**: 程序默认隐藏到系统托盘
+- **快捷访问**: 右键托盘图标快速操作
+- **静默恢复**: 优化完成后自动恢复，无提示
+- **迷惑性界面**: 采用系统工具风格设计
 
 ## 📥 快速开始
 
@@ -40,6 +41,9 @@
 # 克隆仓库
 git clone https://github.com/xqy272/OfficeGuard.git
 cd OfficeGuard
+
+# 安装依赖
+pip install -r requirements.txt
 
 # 直接运行（需要管理员权限）
 python office_tool_final.py
@@ -64,30 +68,44 @@ python office_tool_final.py
 
 ```powershell
 # 安装依赖
-pip install pyinstaller
+pip install -r requirements.txt
 
 # 打包为单文件 exe
-pyinstaller --onefile --windowed --name="办公室全能卫士" --uac-admin --version-file=version.txt office_tool_final.py
+pyinstaller --onefile --windowed --name="系统优化助手" --uac-admin --version-file=version.txt office_tool_final.py
 ```
 
-产物位置：`dist\办公室全能卫士.exe`
+产物位置：`dist\系统优化助手.exe`
 
 ## 📖 使用说明
 
-### 定时任务
+### 首次使用
 
-1. 切换到"定时任务"标签页
-2. 设置倒计时时间（分钟）
-3. 设置缓冲时间（秒）
-4. 点击"启动关机"或"启动睡眠"
-5. 倒计时结束前移动鼠标可取消
+1. 以管理员身份运行程序
+2. 程序自动隐藏到系统托盘（右下角）
+3. 右键托盘图标查看菜单
 
-### 系统锁定
+### 快速优化
 
-1. 切换到"隐形卫士"标签页
-2. 设置解锁密码（纯数字）
-3. 点击"立即锁死系统"
-4. 锁定后盲打密码即可解锁
+**方式一：使用快捷键**
+- 按下 `Ctrl+Alt+L` 立即启动优化
+- 无需打开界面，快速方便
+
+**方式二：使用界面**
+1. 右键托盘图标 → 选择"进入"
+2. 设置恢复密码（纯数字）
+3. 点击"立即优化系统"
+
+### 恢复系统
+
+- 优化期间盲打设置的密码
+- 系统自动恢复正常
+- 不会弹出任何提示
+
+### 快捷键管理
+
+- 右键托盘图标
+- 点击"快捷键：✓ 开启/✗ 关闭"
+- 切换快捷键启用状态
 
 ## 📂 数据存储
 
@@ -109,7 +127,8 @@ C:\Users\{用户}\AppData\Local\OfficeGuard\
 - **操作系统**: Windows 10/11
 - **权限**: 管理员权限（必需）
 - **运行环境**: .NET Framework 4.0+
-- **Python**: 3.7+ (仅源码运行需要)
+- **Python**: 3.9+ (仅源码运行需要)
+- **依赖**: pystray, Pillow (自动打包)
 
 ## 🔧 配置文件
 
@@ -117,24 +136,24 @@ C:\Users\{用户}\AppData\Local\OfficeGuard\
 
 ```json
 {
-    "password": "000",           // 解锁密码
-    "timer_minutes": 60,         // 默认倒计时（分钟）
-    "grace_seconds": 30,         // 缓冲时间（秒）
+    "password": "000",           // 恢复密码
     "mouse_threshold": 15,       // 鼠标移动阈值（像素）
     "win_w": 520,               // 窗口宽度
-    "win_h": 480,               // 窗口高度
+    "win_h": 400,               // 窗口高度
     "win_x": -1,                // 窗口 X 坐标
     "win_y": -1,                // 窗口 Y 坐标
-    "first_run": false          // 首次运行标志
+    "first_run": false,         // 首次运行标志
+    "hotkey_enabled": true      // 快捷键开关
 }
 ```
 
 ## ⚠️ 安全提示
 
-1. **定时任务**: 关闭应用即可安全取消所有任务
-2. **系统锁定**: 锁定后只能通过密码解锁，请牢记密码
-3. **管理员权限**: 本软件需要管理员权限才能正常工作
+1. **记住密码**: 优化后只能通过密码恢复，请牢记密码
+2. **管理员权限**: 本软件需要管理员权限才能正常工作
+3. **快捷键**: Ctrl+Alt+L 可能与其他软件冲突，可通过托盘关闭
 4. **数据备份**: 所有配置保存在 AppData 目录
+5. **退出方式**: 必须通过托盘菜单退出，关闭窗口仅隐藏
 
 ## 🐛 问题排查
 
@@ -166,24 +185,33 @@ rmdir /s /q "%LOCALAPPDATA%\OfficeGuard\config"
 
 ## 📝 更新日志
 
-### v1.0.0 (2025-12-10)
+### v1.1.0 (2025-12-18)
 
 **新增功能**
-- ✅ 首次运行引导界面
-- ✅ 完整的日志记录系统
-- ✅ 数据自动保存到 AppData
-- ✅ 支持打包为独立 exe
+- ✅ 系统托盘功能，默认隐藏运行
+- ✅ 全局快捷键 Ctrl+Alt+L
+- ✅ 托盘菜单：进入、快捷键开关、关闭
+- ✅ 快捷键启用/禁用开关
 
 **优化改进**
-- ✅ 优化 exe 打包适配
-- ✅ 改进关机任务安全退出机制
-- ✅ 优化鼠标困禁逻辑
-- ✅ 增强键盘输入识别
+- ✅ 精简UI界面，移除非必要内容
+- ✅ 迷惑性名称和描述
+- ✅ 优化完成后静默恢复
+- ✅ 窗口关闭改为隐藏到托盘
 
 **问题修复**
-- ✅ 修复多个异常处理问题
-- ✅ 修复配置文件保存问题
-- ✅ 修复窗口位置记忆问题
+- ✅ 修复窗口管理逻辑
+- ✅ 优化托盘图标显示
+
+### v1.0.1 (2025-12-10)
+
+**新增功能**
+- ✅ UI 自动重置功能
+- ✅ 密码显示/隐藏切换
+
+**优化改进**
+- ✅ 改善用户体验
+- ✅ 提高密码安全性
 
 ## 🤝 贡献
 

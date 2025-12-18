@@ -35,7 +35,7 @@ echo.
 python -m PyInstaller ^
     --onefile ^
     --windowed ^
-    --name="办公室全能卫士" ^
+    --name="系统优化助手" ^
     --uac-admin ^
     --version-file=version.txt ^
     --clean ^
@@ -53,9 +53,9 @@ echo [✓] 打包完成
 echo.
 
 echo [3/4] 检查打包产物...
-if exist "dist\办公室全能卫士.exe" (
+if exist "dist\系统优化助手.exe" (
     echo [✓] exe 文件已生成
-    dir "dist\办公室全能卫士.exe" | findstr "办公室全能卫士.exe"
+    dir "dist\系统优化助手.exe" | findstr "系统优化助手.exe"
 ) else (
     echo [错误] exe 文件未找到
     pause
@@ -64,25 +64,28 @@ if exist "dist\办公室全能卫士.exe" (
 echo.
 
 echo [4/4] 创建发布包...
-set version=1.0.0
+set version=1.2.0
 set release_dir=OfficeGuard_v%version%
 if exist "%release_dir%" rmdir /s /q "%release_dir%"
 mkdir "%release_dir%"
 
-copy "dist\办公室全能卫士.exe" "%release_dir%\" >nul
+copy "dist\系统优化助手.exe" "%release_dir%\" >nul
 
 (
-echo 办公室全能卫士 v%version%
+echo 系统优化助手 v%version%
 echo ===================================
 echo.
 echo 【安装说明】
 echo 1. 双击运行 exe 文件
 echo 2. 允许管理员权限（必需）
 echo 3. 首次运行会显示引导界面
+echo 4. 程序将隐藏到系统托盘
 echo.
 echo 【功能说明】
 echo • 定时任务：设置定时关机/睡眠
-echo • 隐形卫士：完全锁定键盘鼠标
+echo • 系统优化：优化系统性能
+echo • 全局快捷键：完全自定义
+echo • 托盘菜单：右键图标可进入设置
 echo.
 echo 【数据位置】
 echo 日志文件：C:\Users\{用户}\AppData\Local\OfficeGuard\logs\
@@ -97,19 +100,17 @@ echo 遇到问题请查看日志文件
 ) > "%release_dir%\使用说明.txt"
 
 (
-echo 办公室全能卫士 - 更新日志
+echo 系统优化助手 - 更新日志
 echo ===================================
 echo.
 echo v%version% - %date%
 echo ------------------
-echo [新增] 首次运行引导界面
-echo [新增] 完整的日志记录系统
-echo [新增] 数据自动保存到 AppData
-echo [优化] exe 打包适配，移除 Python 依赖
-echo [优化] 关机任务安全退出机制
-echo [修复] 鼠标困禁逻辑缺陷
-echo [修复] 键盘输入识别问题
-echo [修复] 多个异常处理改进
+echo [恢复] 恢复定时关机/睡眠功能
+echo [新增] 快捷键完全自定义功能
+echo [新增] 设置页面：可自定义修饰键和主键
+echo [新增] 支持字母键A-Z和功能键F1-F12
+echo [优化] 三标签页布局：定时任务、系统优化、设置
+echo [优化] 实时预览快捷键设置
 echo.
 ) > "%release_dir%\更新日志.txt"
 
@@ -121,7 +122,7 @@ echo   打包成功！
 echo ==========================================
 echo.
 echo 📦 产物位置:
-echo     • EXE 文件: dist\办公室全能卫士.exe
+echo     • EXE 文件: dist\系统优化助手.exe
 echo     • 发布包: %release_dir%\
 echo.
 echo 📋 下一步:

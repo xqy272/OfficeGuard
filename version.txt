@@ -5,8 +5,8 @@
 
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers=(1, 2, 0, 0),
+    prodvers=(1, 2, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -20,14 +20,14 @@ VSVersionInfo(
         StringTable(
           u'080404b0',
           [
-            StringStruct(u'CompanyName', u'Office Tools'),
-            StringStruct(u'FileDescription', u'办公室全能卫士 - 定时任务与系统锁定工具'),
-            StringStruct(u'FileVersion', u'1.0.0.0'),
-            StringStruct(u'InternalName', u'OfficeGuard'),
+            StringStruct(u'CompanyName', u'System Tools'),
+            StringStruct(u'FileDescription', u'系统优化助手 - 系统性能优化工具'),
+            StringStruct(u'FileVersion', u'1.2.0.0'),
+            StringStruct(u'InternalName', u'SystemOptimizer'),
             StringStruct(u'LegalCopyright', u'Copyright © 2025'),
-            StringStruct(u'OriginalFilename', u'办公室全能卫士.exe'),
-            StringStruct(u'ProductName', u'办公室全能卫士'),
-            StringStruct(u'ProductVersion', u'1.0.0.0')
+            StringStruct(u'OriginalFilename', u'系统优化助手.exe'),
+            StringStruct(u'ProductName', u'系统优化助手'),
+            StringStruct(u'ProductVersion', u'1.2.0.0')
           ]
         )
       ]

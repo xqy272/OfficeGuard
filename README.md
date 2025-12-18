@@ -1,13 +1,13 @@
-# OfficeGuard - Office Security Suite
+# System Optimizer - Windows Performance Tool
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
-![Python](https://img.shields.io/badge/python-3.7+-green.svg)
+![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)
+![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 
-A powerful Windows system management tool with scheduled tasks and system lock features
+A powerful Windows system optimization tool for performance enhancement
 
 [English](README.md) | [简体中文](README_zh.md)
 
