@@ -126,9 +126,11 @@ class TimerPage(tk.Frame):
         self.desc_label.pack()
         
         # 右侧 - 设置面板
-        right = tk.Frame(content, bg=self.theme.bg, width=320)
+        right = tk.Frame(content, bg=self.theme.bg)
         right.pack(side="right", fill="y")
-        right.pack_propagate(False)
+        
+        # 占位Frame用于固定宽度
+        tk.Frame(right, width=320, height=1, bg=self.theme.bg).pack()
         
         # 时间设置卡片
         time_card = Card(right, self.theme)
@@ -303,12 +305,21 @@ class TimerPage(tk.Frame):
             
             self.time_label.configure(text="--:--")
             self.desc_label.configure(text="设置时间后点击开始")
-            self.progress.set_progress(0)
+            self.progress.set_value(0)
     
     def update_progress(self, progress: float, remaining: int):
         """更新进度"""
-        self.progress.set_progress(progress)
+        self.progress.set_value(progress * 100)
         
         mins = remaining // 60
         secs = remaining % 60
         self.time_label.configure(text=f"{mins:02d}:{secs:02d}")
+
+    def update_grace(self, remaining: int):
+        """更新宽限期倒计时"""
+        self.status_dot.configure(fg=self.theme.colors.danger)
+        self.status_label.configure(text="即将执行")
+        
+        self.time_label.configure(text=f"{remaining}s")
+        self.desc_label.configure(text="移动鼠标以取消")
+        self.progress.set_value(100)

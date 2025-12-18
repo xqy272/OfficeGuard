@@ -151,7 +151,8 @@ class ModernApp:
         self.pages["settings"] = SettingsPage(self.content_frame, self.theme)
         self.pages["settings"].set_callbacks(
             on_save_hotkey=self._save_hotkey_settings,
-            on_save_autostart=self._save_autostart_settings,
+            on_app_autostart_change=self._on_app_autostart_change,
+            on_save_autologon=self._save_autologon_settings,
             on_startup_apps_change=self._save_startup_apps
         )
         self._load_settings_page()
@@ -261,7 +262,7 @@ class ModernApp:
     def _start_timer(self, action: str, minutes: float, grace: int):
         """启动定时器"""
         if self.timer.start(action, minutes, grace, self.config.get("mouse_threshold")):
-            self.pages["timer"].set_running(True, "关机" if action == "shutdown" else "睡眠")
+            self.pages["timer"].update_state(True, task_type="关机" if action == "shutdown" else "睡眠")
             self._timer_loop()
             
             # 保存设置
@@ -291,13 +292,14 @@ class ModernApp:
     def _cancel_timer(self):
         """取消定时器"""
         self.timer.cancel("手动取消")
-        self.pages["timer"].reset()
+        self.pages["timer"].update_state(False)
     
     def _on_timer_tick(self, h: int, m: int, s: int):
         """定时器计时回调"""
         total = self.timer.total_seconds
         remaining = self.timer.remaining_seconds
-        self.pages["timer"].update_countdown(h, m, s, total, remaining)
+        progress = remaining / total if total > 0 else 0
+        self.pages["timer"].update_progress(progress, remaining)
     
     def _on_grace_tick(self, remaining: int):
         """缓冲期计时回调"""
@@ -309,12 +311,12 @@ class ModernApp:
     
     def _on_timer_complete(self):
         """定时器完成回调"""
-        self.pages["timer"].reset()
+        self.pages["timer"].update_state(False)
         self.root.attributes("-topmost", False)
     
     def _on_timer_cancel(self, msg: str):
         """定时器取消回调"""
-        self.pages["timer"].reset()
+        self.pages["timer"].update_state(False)
         self.root.attributes("-topmost", False)
     
     # ==================== 锁定相关 ====================
@@ -420,17 +422,18 @@ class ModernApp:
         
         messagebox.showinfo("成功", f"快捷键已更新为：{self.config.get_hotkey_display()}", parent=self.root)
     
-    def _save_autostart_settings(self, autostart: bool, autologon: bool, username: str, password: str, domain: str):
-        """保存开机设置"""
-        # 设置开机自启动
-        if self.autostart.set_autostart(autostart):
-            self.config.set("autostart_enabled", autostart)
+    def _on_app_autostart_change(self, enabled: bool):
+        """开机自启动开关回调"""
+        if self.autostart.set_autostart(enabled):
+            self.config.set("autostart_enabled", enabled)
+            self.config.save()
         else:
             messagebox.showerror("错误", "设置开机自启动失败", parent=self.root)
-            return
-        
-        # 设置自动登录
-        if autologon:
+            # 恢复开关状态（如果需要，这里可以添加逻辑重新加载页面状态）
+
+    def _save_autologon_settings(self, enabled: bool, username: str, password: str, domain: str):
+        """保存自动登录设置"""
+        if enabled:
             if not username or not password:
                 messagebox.showwarning("警告", "请输入用户名和密码", parent=self.root)
                 return
@@ -440,13 +443,16 @@ class ModernApp:
                 self.config.set("autologon_username", username)
                 self.config.set("autologon_password", password)
                 self.config.set("autologon_domain", domain)
+                self.config.save()
+                messagebox.showinfo("成功", "自动登录设置已保存", parent=self.root)
             else:
                 messagebox.showerror("错误", "设置自动登录失败", parent=self.root)
-                return
         else:
             if self.config.get("autologon_enabled"):
                 self.autologon.set_autologon(False)
             self.config.set("autologon_enabled", False)
+            self.config.save()
+            messagebox.showinfo("成功", "自动登录已禁用", parent=self.root)
         
         self.config.save()
         messagebox.showinfo("成功", "开机设置已保存", parent=self.root)

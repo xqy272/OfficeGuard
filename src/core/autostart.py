@@ -117,6 +117,28 @@ class AutoStartManager:
         """创建任务计划"""
         logger.info(f"正在创建任务计划: {self.TASK_NAME}")
         
+        # 如果不是管理员，尝试提权执行
+        if not is_admin():
+            logger.info("当前未拥有管理员权限，尝试提权执行...")
+            try:
+                import ctypes
+                # 注意：/TR 参数内部的引号需要转义
+                params = f'/Create /TN "{self.TASK_NAME}" /TR "\"{self.app_path}\" --boot-startup" /SC ONLOGON /RL HIGHEST /F'
+                
+                ret = ctypes.windll.shell32.ShellExecuteW(
+                    None, "runas", "schtasks", params, None, 0
+                )
+                
+                if ret > 32:
+                    logger.info("已请求管理员权限")
+                    return True
+                else:
+                    logger.error(f"请求管理员权限失败，错误码: {ret}")
+                    return False
+            except Exception as e:
+                logger.error(f"提权执行失败: {e}")
+                return False
+        
         # 先删除旧任务
         try:
             subprocess.run(
@@ -152,6 +174,27 @@ class AutoStartManager:
     def _delete_task(self) -> bool:
         """删除任务计划"""
         logger.info(f"正在删除任务计划: {self.TASK_NAME}")
+        
+        # 如果不是管理员，尝试提权执行
+        if not is_admin():
+            logger.info("当前未拥有管理员权限，尝试提权执行...")
+            try:
+                import ctypes
+                params = f'/Delete /TN "{self.TASK_NAME}" /F'
+                
+                ret = ctypes.windll.shell32.ShellExecuteW(
+                    None, "runas", "schtasks", params, None, 0
+                )
+                
+                if ret > 32:
+                    logger.info("已请求管理员权限")
+                    return True
+                else:
+                    logger.error(f"请求管理员权限失败，错误码: {ret}")
+                    return False
+            except Exception as e:
+                logger.error(f"提权执行失败: {e}")
+                return False
         
         result = subprocess.run(
             ['schtasks', '/Delete', '/TN', self.TASK_NAME, '/F'],

@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from src.utils.logger import setup_logging
 from src.ui.app import ModernApp
+from src.core.version import VERSION
 
 
 def setup_dpi():
@@ -34,7 +35,7 @@ def main():
     # 初始化日志
     logger = setup_logging()
     logger.info("=" * 50)
-    logger.info("OfficeGuard v2.0.0 - 启动")
+    logger.info(f"OfficeGuard v{VERSION} - 启动")
     logger.info("=" * 50)
     
     try:

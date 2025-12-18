@@ -22,14 +22,41 @@ if errorlevel 1 (
 echo [✓] PyInstaller 已就绪
 echo.
 
-echo [1/4] 清理旧文件...
+echo [1/5] 清理旧文件...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 if exist "办公室全能卫士.spec" del /q "办公室全能卫士.spec"
 echo [✓] 清理完成
 echo.
 
-echo [2/4] 开始打包（这可能需要几分钟）...
+echo [2/5] 更新版本信息...
+:: 获取日期
+for /f "tokens=2 delims==" %%I in ('wmic os get localdatetime /value') do set datetime=%%I
+set BUILD_DATE=%datetime:~0,4%-%datetime:~4,2%-%datetime:~6,2%
+
+:: 获取版本号
+set VERSION=2.0.0
+for /f "tokens=4 delims='" %%a in ('findstr "ProductVersion" version.txt') do set VERSION=%%a
+:: 去除末尾的 .0
+if "%VERSION:~-2%"==".0" set VERSION=%VERSION:~0,-2%
+
+echo 检测到版本: %VERSION%
+echo 构建日期: %BUILD_DATE%
+
+if not exist src\core mkdir src\core
+(
+echo """
+echo 版本信息
+echo 此文件由构建脚本自动更新
+echo """
+echo.
+echo VERSION = "%VERSION%"
+echo BUILD_DATE = "%BUILD_DATE%"
+) > src\core\version.py
+echo [✓] 版本信息已更新
+echo.
+
+echo [3/5] 开始打包（这可能需要几分钟）...
 echo.
 
 python -m PyInstaller ^
@@ -39,7 +66,7 @@ python -m PyInstaller ^
     --uac-admin ^
     --version-file=version.txt ^
     --clean ^
-    office_tool_final.py
+    main.py
 
 if errorlevel 1 (
     echo.
@@ -52,7 +79,7 @@ echo.
 echo [✓] 打包完成
 echo.
 
-echo [3/4] 检查打包产物...
+echo [4/5] 检查打包产物...
 if exist "dist\系统优化助手.exe" (
     echo [✓] exe 文件已生成
     dir "dist\系统优化助手.exe" | findstr "系统优化助手.exe"
@@ -63,8 +90,8 @@ if exist "dist\系统优化助手.exe" (
 )
 echo.
 
-echo [4/4] 创建发布包...
-set version=1.3.0
+echo [5/5] 创建发布包...
+set version=%VERSION%
 set release_dir=OfficeGuard_v%version%
 if exist "%release_dir%" rmdir /s /q "%release_dir%"
 mkdir "%release_dir%"
@@ -140,9 +167,6 @@ echo.
 echo ==========================================
 echo.
 
-choice /C YN /M "是否打开产物文件夹"
-if errorlevel 2 goto end
-if errorlevel 1 explorer dist
-
-:end
-pause
+:: 自动打开输出目录
+explorer dist
+exit /b 0

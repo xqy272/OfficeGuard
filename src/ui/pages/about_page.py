@@ -8,6 +8,7 @@ import tkinter as tk
 from ..theme import Theme
 from ..components.card import Card, SectionHeader
 from ..components.scrollable import ScrollableFrame
+from ...core.version import VERSION, BUILD_DATE
 
 
 class AboutPage(tk.Frame):
@@ -78,8 +79,8 @@ class AboutPage(tk.Frame):
         version_frame.pack(fill="x")
         
         version_info = [
-            ("版本号", "1.3.2"),
-            ("发布日期", "2024-12"),
+            ("版本号", VERSION),
+            ("发布日期", BUILD_DATE),
             ("运行环境", "Windows 10/11"),
         ]
         
@@ -160,7 +161,7 @@ class AboutPage(tk.Frame):
         
         tk.Label(
             copyright_content,
-            text="© 2024 QingYang. All rights reserved.",
+            text="© 2025 QingYang. All rights reserved.",
             font=(self.theme.fonts.FAMILY, self.theme.fonts.XS),
             fg=self.theme.muted,
             bg=self.theme.card

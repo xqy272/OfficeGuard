@@ -35,13 +35,15 @@ class SettingsPage(tk.Frame):
     def set_callbacks(
         self,
         on_save_hotkey: Callable = None,
-        on_save_autostart: Callable = None,
+        on_app_autostart_change: Callable = None,
+        on_save_autologon: Callable = None,
         on_startup_apps_change: Callable = None,
-        **kwargs  # 接受其他未使用的参数
+        **kwargs
     ):
         """设置回调函数"""
         self._on_save_hotkey = on_save_hotkey
-        self._on_save_autostart = on_save_autostart
+        self._on_app_autostart_change = on_app_autostart_change
+        self._on_save_autologon = on_save_autologon
         self._on_startup_apps_change = on_startup_apps_change
     
     def _create_ui(self):
@@ -285,9 +287,15 @@ class SettingsPage(tk.Frame):
             autostart_content,
             self.theme,
             text="开机自启动 OfficeGuard",
-            description="计算机启动时自动运行此程序"
+            description="计算机启动时自动运行此程序",
+            command=self._on_autostart_switch
         )
         self.app_autostart.pack(fill="x")
+    
+    def _on_autostart_switch(self, enabled: bool):
+        """开机自启动开关回调"""
+        if self._on_app_autostart_change:
+            self._on_app_autostart_change(enabled)
     
     def _save_hotkey(self):
         """保存快捷键设置"""
@@ -302,8 +310,8 @@ class SettingsPage(tk.Frame):
     
     def _save_autologon(self):
         """保存自动登录设置"""
-        if self._on_save_autostart:
-            self._on_save_autostart(
+        if self._on_save_autologon:
+            self._on_save_autologon(
                 self.autologon_enabled.get(),
                 self.autologon_username.get(),
                 self.autologon_password.get(),

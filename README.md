@@ -64,6 +64,7 @@ pip install -r requirements.txt
 
 # 运行（需要管理员权限）
 python main.py
+.\.venv\Scripts\python.exe main.py
 ```
 
 ## 🔨 从源码构建
