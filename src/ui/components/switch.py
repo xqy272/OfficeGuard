@@ -37,6 +37,7 @@ class Switch(tk.Canvas):
         self._width = width
         self._height = height
         self._bg_color = bg_color
+        self._state = "normal"
         
         # 颜色
         self._on_color = theme.fg
@@ -48,8 +49,19 @@ class Switch(tk.Canvas):
         
         # 绑定事件
         self.bind("<Button-1>", self._on_click)
-        self.bind("<Enter>", lambda e: self.config(cursor="hand2"))
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", lambda e: self.config(cursor=""))
+
+    def _on_enter(self, event):
+        if self._state == "normal":
+            self.config(cursor="hand2")
     
+    def configure(self, **kwargs):
+        if "state" in kwargs:
+            self._state = kwargs.pop("state")
+            self._draw()
+        super().configure(**kwargs)
+        
     def _draw(self):
         """绘制开关"""
         self.delete("all")
@@ -58,7 +70,11 @@ class Switch(tk.Canvas):
         r = h // 2
         
         # 背景色
-        bg_color = self._on_color if self._value else self._off_color
+        if self._state == "disabled":
+            bg_color = self.theme.colors.border
+            alpha = 0.5 # 模拟禁用状态
+        else:
+            bg_color = self._on_color if self._value else self._off_color
         
         # 绘制圆角矩形背景
         self.create_arc(0, 0, h, h, start=90, extent=180, fill=bg_color, outline=bg_color)
@@ -83,6 +99,9 @@ class Switch(tk.Canvas):
     
     def _on_click(self, event):
         """点击切换"""
+        if self._state == "disabled":
+            return
+            
         self._value = not self._value
         self._draw()
         

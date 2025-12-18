@@ -13,6 +13,7 @@ from ..components.base import ModernButton, ModernEntry, ModernCheckbox
 from ..components.card import Card, SectionHeader, Separator
 from ..components.switch import LabeledSwitch
 from ..components.scrollable import ScrollableFrame
+from ..components.progress import Spinner
 
 
 class SettingsPage(tk.Frame):
@@ -291,6 +292,27 @@ class SettingsPage(tk.Frame):
             command=self._on_autostart_switch
         )
         self.app_autostart.pack(fill="x")
+        
+        # 加载动画
+        self.autostart_spinner = Spinner(
+            self.app_autostart,
+            self.theme,
+            size=20,
+            bg=self.theme.card
+        )
+        self.autostart_spinner.pack(side="right", padx=8)
+        self.autostart_spinner.pack_forget()  # 默认隐藏
+    
+    def set_autostart_loading(self, loading: bool):
+        """设置自启动加载状态"""
+        if loading:
+            self.autostart_spinner.pack(side="right", padx=8)
+            self.autostart_spinner.start()
+            self.app_autostart.switch.configure(state="disabled") # 禁用开关防止重复点击
+        else:
+            self.autostart_spinner.stop()
+            self.autostart_spinner.pack_forget()
+            self.app_autostart.switch.configure(state="normal")
     
     def _on_autostart_switch(self, enabled: bool):
         """开机自启动开关回调"""

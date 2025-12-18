@@ -195,11 +195,12 @@ class Spinner(tk.Canvas):
         size: int = 24,
         **kwargs
     ):
+        bg_color = kwargs.pop('bg', theme.bg)
         super().__init__(
             parent,
             width=size,
             height=size,
-            bg=theme.bg,
+            bg=bg_color,
             highlightthickness=0,
             **kwargs
         )

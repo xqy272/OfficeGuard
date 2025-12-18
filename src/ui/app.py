@@ -424,12 +424,26 @@ class ModernApp:
     
     def _on_app_autostart_change(self, enabled: bool):
         """开机自启动开关回调"""
-        if self.autostart.set_autostart(enabled):
-            self.config.set("autostart_enabled", enabled)
-            self.config.save()
-        else:
-            messagebox.showerror("错误", "设置开机自启动失败", parent=self.root)
-            # 恢复开关状态（如果需要，这里可以添加逻辑重新加载页面状态）
+        def task():
+            # 在主线程更新UI
+            self.root.after(0, lambda: self.pages["settings"].set_autostart_loading(True))
+            
+            success = self.autostart.set_autostart(enabled)
+            
+            def on_complete():
+                self.pages["settings"].set_autostart_loading(False)
+                if success:
+                    self.config.set("autostart_enabled", enabled)
+                    self.config.save()
+                else:
+                    messagebox.showerror("错误", "设置开机自启动失败", parent=self.root)
+                    # 恢复开关状态
+                    self.pages["settings"].app_autostart.set(not enabled)
+            
+            self.root.after(0, on_complete)
+        
+        import threading
+        threading.Thread(target=task, daemon=True).start()
 
     def _save_autologon_settings(self, enabled: bool, username: str, password: str, domain: str):
         """保存自动登录设置"""
@@ -438,24 +452,29 @@ class ModernApp:
                 messagebox.showwarning("警告", "请输入用户名和密码", parent=self.root)
                 return
             
-            if self.autologon.set_autologon(True, username, password, domain):
+            success, msg = self.autologon.set_autologon(True, username, password, domain)
+            if success:
                 self.config.set("autologon_enabled", True)
                 self.config.set("autologon_username", username)
                 self.config.set("autologon_password", password)
                 self.config.set("autologon_domain", domain)
                 self.config.save()
-                messagebox.showinfo("成功", "自动登录设置已保存", parent=self.root)
+                messagebox.showinfo("成功", msg, parent=self.root)
             else:
-                messagebox.showerror("错误", "设置自动登录失败", parent=self.root)
+                messagebox.showerror("错误", f"设置自动登录失败: {msg}", parent=self.root)
         else:
             if self.config.get("autologon_enabled"):
-                self.autologon.set_autologon(False)
-            self.config.set("autologon_enabled", False)
-            self.config.save()
-            messagebox.showinfo("成功", "自动登录已禁用", parent=self.root)
-        
-        self.config.save()
-        messagebox.showinfo("成功", "开机设置已保存", parent=self.root)
+                success, msg = self.autologon.set_autologon(False)
+                if success:
+                    self.config.set("autologon_enabled", False)
+                    self.config.save()
+                    messagebox.showinfo("成功", msg, parent=self.root)
+                else:
+                    messagebox.showerror("错误", f"禁用自动登录失败: {msg}", parent=self.root)
+            else:
+                # 已经是禁用状态
+                self.config.set("autologon_enabled", False)
+                self.config.save()
     
     def _save_startup_apps(self, apps: list):
         """保存启动软件列表"""

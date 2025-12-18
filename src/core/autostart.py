@@ -291,7 +291,48 @@ class AutoLogonManager:
             logger.error(f"下载Autologon工具失败: {e}")
             return None
     
-    def set_autologon(self, enable: bool, username: str = "", password: str = "", domain: str = ".") -> bool:
+    def _verify_credentials(self, username, password, domain=".") -> Tuple[bool, str]:
+        """验证 Windows 凭据"""
+        try:
+            import ctypes
+            from ctypes import wintypes
+            
+            if not domain or domain == ".":
+                domain = None
+            
+            # LOGON32_LOGON_INTERACTIVE = 2
+            # LOGON32_PROVIDER_DEFAULT = 0
+            token = ctypes.c_void_p()
+            
+            res = ctypes.windll.advapi32.LogonUserW(
+                ctypes.c_wchar_p(username),
+                ctypes.c_wchar_p(domain),
+                ctypes.c_wchar_p(password),
+                2, 
+                0,
+                ctypes.byref(token)
+            )
+            
+            if res != 0:
+                ctypes.windll.kernel32.CloseHandle(token)
+                return True, ""
+            else:
+                error_code = ctypes.windll.kernel32.GetLastError()
+                buffer = ctypes.create_unicode_buffer(256)
+                ctypes.windll.kernel32.FormatMessageW(
+                    0x00001000, # FORMAT_MESSAGE_FROM_SYSTEM
+                    None,
+                    error_code,
+                    0,
+                    buffer,
+                    len(buffer),
+                    None
+                )
+                return False, buffer.value.strip()
+        except Exception as e:
+            return False, f"凭据验证异常: {str(e)}"
+
+    def set_autologon(self, enable: bool, username: str = "", password: str = "", domain: str = ".") -> Tuple[bool, str]:
         """
         设置 Windows 自动登录
         
@@ -299,13 +340,18 @@ class AutoLogonManager:
         :param username: 用户名
         :param password: 密码
         :param domain: 域名，默认为本机
-        :return: 是否设置成功
+        :return: (是否成功, 消息)
         """
         try:
             if enable:
+                # 先验证凭据
+                valid, msg = self._verify_credentials(username, password, domain)
+                if not valid:
+                    return False, f"验证失败: {msg}"
+
                 autologon_path = self._download_autologon()
                 if not autologon_path:
-                    return False
+                    return False, "无法下载 Autologon 工具"
                 
                 cmd = [autologon_path, username, domain, password, '/accepteula']
                 logger.info(f"正在配置自动登录，用户名: {username}")
@@ -317,10 +363,10 @@ class AutoLogonManager:
                 
                 if result.returncode == 0:
                     logger.info("自动登录已启用（使用LSA加密）")
-                    return True
+                    return True, "自动登录已启用"
                 else:
                     logger.error(f"Autologon执行失败: {result.stderr}")
-                    return False
+                    return False, f"Autologon执行失败: {result.stderr}"
             else:
                 # 禁用自动登录
                 logger.info("正在禁用自动登录")
@@ -340,10 +386,10 @@ class AutoLogonManager:
                 
                 winreg.CloseKey(key)
                 logger.info("自动登录已禁用")
-                return True
+                return True, "自动登录已禁用"
         except Exception as e:
             logger.error(f"设置自动登录失败: {e}")
-            return False
+            return False, f"发生异常: {str(e)}"
 
 
 def launch_startup_apps(app_list: List[dict]) -> Tuple[List[str], List[str]]:

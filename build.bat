@@ -1,17 +1,27 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 >nul
+
+:: 检测 Python 解释器
+if exist ".venv\Scripts\python.exe" (
+    set "PYTHON_EXE=.venv\Scripts\python.exe"
+    echo [信息] 使用虚拟环境: .venv
+) else (
+    set "PYTHON_EXE=python"
+    echo [信息] 使用系统 Python
+)
+
 echo ==========================================
 echo   办公室全能卫士 - 一键打包工具
 echo ==========================================
 echo.
 
-python -c "import PyInstaller" 2>nul
+"%PYTHON_EXE%" -c "import PyInstaller" 2>nul
 if errorlevel 1 (
     echo [错误] 未安装 PyInstaller
     echo.
     echo 正在安装 PyInstaller...
-    pip install pyinstaller
+    "%PYTHON_EXE%" -m pip install pyinstaller
     if errorlevel 1 (
         echo [失败] 安装失败，请手动执行: pip install pyinstaller
         pause
@@ -59,12 +69,15 @@ echo.
 echo [3/5] 开始打包（这可能需要几分钟）...
 echo.
 
-python -m PyInstaller ^
+"%PYTHON_EXE%" -m PyInstaller ^
     --onefile ^
     --windowed ^
     --name="系统优化助手" ^
     --uac-admin ^
     --version-file=version.txt ^
+    --hidden-import=pynput ^
+    --hidden-import=pynput.keyboard._win32 ^
+    --hidden-import=pynput.mouse._win32 ^
     --clean ^
     main.py
 
