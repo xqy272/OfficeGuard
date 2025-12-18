@@ -238,6 +238,46 @@ class ModernButton(tk.Frame):
         self.label.configure(text=text)
 
 
+class EyeIcon(tk.Canvas):
+    """密码可见性切换图标"""
+    
+    def __init__(self, parent, theme: Theme, command: Callable, size: int = 16, **kwargs):
+        bg = kwargs.pop('bg', theme.colors.input_bg)
+        super().__init__(parent, width=size, height=size, bg=bg, highlightthickness=0, **kwargs)
+        self.theme = theme
+        self.command = command
+        self._size = size
+        self._is_visible = False
+        
+        self.bind("<Button-1>", lambda e: command())
+        self.bind("<Enter>", lambda e: self.configure(cursor="hand2"))
+        self.bind("<Leave>", lambda e: self.configure(cursor=""))
+        self.draw()
+
+    def set_state(self, is_visible: bool):
+        self._is_visible = is_visible
+        self.draw()
+
+    def draw(self):
+        self.delete("all")
+        w, h = self._size, self._size
+        color = self.theme.muted
+        
+        # 眼睛轮廓
+        # 上眼睑
+        self.create_line(1, h/2, w/2, 1, w-1, h/2, smooth=True, fill=color, width=1.5)
+        # 下眼睑
+        self.create_line(1, h/2, w/2, h-1, w-1, h/2, smooth=True, fill=color, width=1.5)
+        
+        # 瞳孔
+        self.create_oval(w*0.35, h*0.35, w*0.65, h*0.65, fill=color, outline="")
+        
+        if self._is_visible:
+            # 斜杠 (表示点击隐藏，或者当前是可见状态)
+            # 这里设计为：可见状态下显示斜杠眼，表示"点击隐藏"
+            self.create_line(3, 3, w-3, h-3, fill=color, width=1.5)
+
+
 class ModernEntry(tk.Frame):
     """现代化输入框 - 简洁风格"""
     
@@ -257,6 +297,7 @@ class ModernEntry(tk.Frame):
         self._show_char = show
         self._has_focus = False
         self._has_content = False
+        self._is_visible = False # 密码是否可见
         
         # 边框容器
         self.border_frame = tk.Frame(self, bg=theme.border)
@@ -277,7 +318,17 @@ class ModernEntry(tk.Frame):
             width=width // 8,
             show=show if show else ""
         )
-        self.entry.pack(fill="x", padx=10, pady=8)
+        self.entry.pack(side="left", fill="x", expand=True, padx=(10, 5), pady=8)
+        
+        # 密码可见性切换按钮
+        if show:
+            self.eye_icon = EyeIcon(
+                self.inner,
+                theme,
+                command=self._toggle_visibility,
+                bg=theme.colors.input_bg
+            )
+            self.eye_icon.pack(side="right", padx=(0, 10))
         
         # 显示 placeholder
         self._show_placeholder()
@@ -287,12 +338,32 @@ class ModernEntry(tk.Frame):
         self.entry.bind("<FocusOut>", self._on_focus_out)
         self.entry.bind("<KeyRelease>", self._on_key)
     
+    def _toggle_visibility(self):
+        """切换密码可见性"""
+        self._is_visible = not self._is_visible
+        self.eye_icon.set_state(self._is_visible)
+        self._update_show_char()
+        
+    def _update_show_char(self):
+        """更新显示字符"""
+        if not self._show_char:
+            return
+            
+        if not self._has_content and not self._has_focus:
+            # 显示占位符时，不隐藏
+            self.entry.configure(show="")
+        else:
+            # 显示内容时，根据可见性状态决定
+            if self._is_visible:
+                self.entry.configure(show="")
+            else:
+                self.entry.configure(show=self._show_char)
+    
     def _show_placeholder(self):
         """显示占位符"""
         if not self._has_content and not self._has_focus:
             self.entry.delete(0, tk.END)
-            if self._show_char:
-                self.entry.configure(show="")
+            self.entry.configure(show="") # 占位符始终可见
             self.entry.insert(0, self.placeholder)
             self.entry.configure(fg=self.theme.muted)
     
@@ -301,8 +372,7 @@ class ModernEntry(tk.Frame):
         if self.entry.get() == self.placeholder:
             self.entry.delete(0, tk.END)
             self.entry.configure(fg=self.theme.fg)
-            if self._show_char:
-                self.entry.configure(show=self._show_char)
+            self._update_show_char()
     
     def _on_focus_in(self, event):
         """获得焦点"""
@@ -325,7 +395,13 @@ class ModernEntry(tk.Frame):
     def get(self) -> str:
         """获取输入值"""
         value = self.entry.get()
-        if value == self.placeholder:
+        if value == self.placeholder and not self._has_focus and not self._has_content:
+             # 注意：如果用户输入的内容恰好和placeholder一样，_has_content应该是True
+             # 这里逻辑稍微有点瑕疵，但通常placeholder是提示语，用户输入不会完全一样
+             # 更好的判断是依赖 _has_content 标志，但 _has_content 在 _on_key 中更新
+             return ""
+        # 修正：如果显示的是placeholder，返回空
+        if not self._has_content and not self._has_focus:
             return ""
         return value
     
@@ -335,8 +411,7 @@ class ModernEntry(tk.Frame):
         if value:
             self._has_content = True
             self.entry.configure(fg=self.theme.fg)
-            if self._show_char:
-                self.entry.configure(show=self._show_char)
+            self._update_show_char()
             self.entry.insert(0, value)
         else:
             self._has_content = False
@@ -352,8 +427,7 @@ class ModernEntry(tk.Frame):
             self._hide_placeholder()
         self._has_content = True
         self.entry.configure(fg=self.theme.fg)
-        if self._show_char:
-            self.entry.configure(show=self._show_char)
+        self._update_show_char()
         self.entry.insert(index, value)
     
     def delete(self, first, last=None):
