@@ -1,230 +1,146 @@
-# System Optimizer - Windows Performance Tool
+# OfficeGuard - 系统优化助手
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 
-A powerful Windows system optimization tool with scheduling, auto-startup, auto-logon, and encrypted configuration
-
-[English](README.md) | [简体中文](README_zh.md)
+一款功能强大的 Windows 系统优化工具，支持定时任务、系统锁定、开机自启动和自动登录
 
 </div>
 
-## ✨ Key Features
+## ✨ 主要特性
 
-### ⏱️ Scheduled Tasks
-- **Scheduled Shutdown/Sleep**: Set countdown timers for automatic system shutdown or sleep
-- **Smart Grace Period**: Provides buffer time before execution - move mouse to cancel
-- **Safe Control**: Close the app to cancel all tasks anytime
-- **Visual Progress**: Real-time countdown and progress bar
+### ⏱️ 定时任务
+- **定时关机/睡眠**: 灵活设置倒计时任务
+- **圆形进度条**: 可视化显示倒计时进度
+- **缓冲期机制**: 执行前可通过鼠标活动取消
 
-### ⚡ System Optimization
-- **Deep Optimization**: Optimize system performance and clear memory fragmentation
-- **Global Hotkey**: Customizable hotkey (default Ctrl+Alt+L)
-- **System Tray**: Run silently in background, always accessible
-- **Password Protection**: Requires password to restore after optimization
+### 🔒 系统锁定
+- **内核级锁定**: 安全的键鼠屏蔽
+- **密码保护**: 需输入密码解锁
+- **全局快捷键**: 可自定义快捷键（默认 Ctrl+Alt+L）
+- **系统托盘**: 静默运行于后台
 
-### 🚀 Auto-Startup System
-- **Boot Auto-Start**: Automatically run program on system startup
-- **Auto-Login**: Integrated Sysinternals Autologon with LSA encryption
-- **Startup Manager**: Customize list of applications to launch on boot
-- **Smart Detection**: Distinguish between boot and sleep wake-up
+### 🚀 开机自动化
+- **开机自启动**: 使用 Windows 任务计划程序
+- **自动登录**: 集成 Sysinternals Autologon，LSA 加密存储
+- **启动软件管理**: 自定义开机启动的应用程序
 
-### 🔒 Security Protection
-- **Config Encryption**: Encrypt configuration files using Windows DPAPI
-- **User Binding**: Only current user can decrypt configuration
-- **LSA Encryption**: Auto-login password uses system-level encryption
-- **Secure Storage**: All sensitive information encrypted
+### 🎨 现代化界面 (v2.0)
+- **全新 UI**: 参考 shadcn/ui 设计语言
+- **卡片式布局**: 简洁现代的视觉风格
+- **4K 支持**: 自动适配高 DPI 显示
+- **滚动支持**: 所有页面支持鼠标滚轮
 
-## 📥 Quick Start
+### 🔐 安全保护
+- **配置加密**: 使用 Windows DPAPI 加密
+- **用户绑定**: 只有当前用户可解密
+- **LSA 加密**: 自动登录密码系统级加密
 
-### Using exe Version (Recommended)
+## 📥 快速开始
 
-1. Download [latest release](https://github.com/xqy272/OfficeGuard/releases)
-2. Right-click and "Run as administrator"
-3. Follow the first-run guide
+### 使用 exe 版本（推荐）
 
-### Run from Source
+1. 下载 [最新版本](https://github.com/xqy272/OfficeGuard/releases)
+2. 右键"以管理员身份运行" exe 文件
+3. 程序自动最小化到系统托盘
+
+### 从源码运行
 
 ```powershell
-# Clone repository
+# 克隆仓库
 git clone https://github.com/xqy272/OfficeGuard.git
 cd OfficeGuard
 
-# Run directly (requires admin privileges)
-python office_tool_final.py
+# 创建虚拟环境（推荐）
+python -m venv .venv
+.\.venv\Scripts\activate
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 运行（需要管理员权限）
+python main.py
 ```
 
-## 🔨 Build from Source
-
-### Automatic Build (Recommended)
+## 🔨 从源码构建
 
 ```powershell
-# Double-click or run in command line
+# 自动构建
 .\build.bat
+
+# 或手动构建
+pyinstaller OfficeGuard.spec
 ```
 
-The build script will automatically:
-- ✅ Check and install PyInstaller
-- ✅ Clean old files
-- ✅ Package as standalone exe
-- ✅ Create release package
+产物位置：`dist\系统优化助手.exe`
 
-### Manual Build
-
-```powershell
-# Install dependencies
-pip install pyinstaller
-
-# Build single-file exe
-pyinstaller --onefile --windowed --name="OfficeGuard" --uac-admin --version-file=version.txt office_tool_final.py
-```
-
-Output location: `dist\OfficeGuard.exe`
-
-## 📖 Usage Guide
-
-### Scheduled Tasks
-
-1. Switch to "Timer Tasks" tab
-2. Set countdown time (minutes)
-3. Set grace period (seconds)
-4. Click "Start Shutdown" or "Start Sleep"
-5. Move mouse before countdown ends to cancel
-
-### System Lock
-
-1. Switch to "Stealth Guard" tab
-2. Set unlock password (numbers only)
-3. Click "Lock System Now"
-4. Type password blindly to unlock
-
-## 📂 Data Storage
-
-All data is stored in user directory, not in program folder:
+## 📁 项目结构
 
 ```
-C:\Users\{User}\AppData\Local\OfficeGuard\
-├── logs\               # Log files
-│   ├── guard.log      # Current log (max 5MB)
-│   ├── guard.log.1    # Backup 1
-│   ├── guard.log.2    # Backup 2
-│   └── guard.log.3    # Backup 3
-└── config\
-    └── guard_config.json  # Configuration file
+OfficeGuard/
+├── main.py                 # 程序入口
+├── src/
+│   ├── core/              # 核心功能
+│   │   ├── config.py      # 配置管理
+│   │   ├── timer.py       # 定时任务
+│   │   ├── lock.py        # 系统锁定
+│   │   ├── hotkey.py      # 快捷键
+│   │   └── tray.py        # 系统托盘
+│   ├── ui/                # 用户界面
+│   │   ├── app.py         # 主应用
+│   │   ├── theme.py       # 主题系统
+│   │   ├── components/    # UI 组件
+│   │   └── pages/         # 功能页面
+│   └── utils/             # 工具模块
+├── docs/                  # 文档
+└── requirements.txt       # 依赖
 ```
 
-## ⚙️ System Requirements
+## 📖 使用说明
 
-- **OS**: Windows 10/11
-- **Privileges**: Administrator (required)
-- **Runtime**: .NET Framework 4.0+
-- **Python**: 3.7+ (only for running from source)
+### 系统托盘
+- 程序启动后自动最小化到托盘
+- 右键托盘图标查看菜单
+- 双击托盘图标打开主窗口
 
-## 🔧 Configuration
+### 快捷键
+- 默认：`Ctrl + Alt + L` 快速锁定
+- 可在设置页面自定义组合键
 
-Configuration file `guard_config.json` contains:
+### 定时任务
+1. 设置定时时间（分钟）
+2. 设置宽限期（秒）
+3. 点击"定时关机"或"定时睡眠"
+4. 宽限期内移动鼠标可取消任务
 
-```json
-{
-    "password": "000",           // Unlock password
-    "timer_minutes": 60,         // Default countdown (minutes)
-    "grace_seconds": 30,         // Grace period (seconds)
-    "mouse_threshold": 15,       // Mouse movement threshold (pixels)
-    "win_w": 520,               // Window width
-    "win_h": 480,               // Window height
-    "win_x": -1,                // Window X position
-    "win_y": -1,                // Window Y position
-    "first_run": false          // First run flag
-}
-```
+## 🛠️ 技术栈
 
-## ⚠️ Safety Tips
+- **Python 3.9+** - 核心语言
+- **tkinter** - GUI 框架
+- **pystray** - 系统托盘
+- **pynput** - 全局快捷键
+- **Pillow** - 图像处理
+- **Windows API** - 系统集成
 
-1. **Scheduled Tasks**: Close app to safely cancel all tasks
-2. **System Lock**: Can only unlock with password - remember it!
-3. **Admin Rights**: Required for proper functionality
-4. **Data Backup**: All settings saved in AppData directory
+## 📝 更新日志
 
-## 🐛 Troubleshooting
+查看 [CHANGELOG.md](CHANGELOG.md) 了解详细更新历史。
 
-### exe Won't Start
+## 🤝 贡献
 
-```powershell
-# Check log file
-notepad %LOCALAPPDATA%\OfficeGuard\logs\guard.log
-```
+欢迎提交 Issue 和 Pull Request！
 
-### Feature Issues
+查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解贡献指南。
 
-```powershell
-# Reset configuration
-rmdir /s /q "%LOCALAPPDATA%\OfficeGuard\config"
-```
+## 📄 许可证
 
-### Permission Denied
+本项目采用 [MIT 许可证](LICENSE)。
 
-Right-click exe file and select "Run as administrator"
+## 🙏 致谢
 
-## 🗑️ Uninstall
-
-1. Delete exe file
-2. (Optional) Clean data directory:
-   ```powershell
-   rmdir /s /q "%LOCALAPPDATA%\OfficeGuard"
-   ```
-
-## 📝 Changelog
-
-### v1.0.0 (2025-12-10)
-
-**New Features**
-- ✅ First-run guide interface
-- ✅ Complete logging system
-- ✅ Auto-save data to AppData
-- ✅ Support for standalone exe
-
-**Improvements**
-- ✅ Optimized exe packaging
-- ✅ Improved shutdown task safety
-- ✅ Enhanced mouse confinement logic
-- ✅ Better keyboard input recognition
-
-**Bug Fixes**
-- ✅ Fixed multiple exception handling issues
-- ✅ Fixed config file save problems
-- ✅ Fixed window position memory issues
-
-## 🤝 Contributing
-
-Issues and Pull Requests are welcome!
-
-1. Fork this repository
-2. Create feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Create Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details
-
-## 💖 Acknowledgments
-
-Thanks to all contributors and users for their support!
-
-## 📧 Contact
-
-- **GitHub**: [xqy272](https://github.com/xqy272)
-- **Issues**: [Submit Issue](https://github.com/xqy272/OfficeGuard/issues)
-
----
-
-<div align="center">
-
-**If this project helps you, please give it a ⭐ Star!**
-
-</div>
+- [shadcn/ui](https://ui.shadcn.com/) - UI 设计灵感
+- [Sysinternals Autologon](https://docs.microsoft.com/sysinternals/downloads/autologon) - 自动登录工具
