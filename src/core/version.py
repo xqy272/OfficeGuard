@@ -4,4 +4,4 @@
 """
 
 VERSION = "2.0.0"
-BUILD_DATE = "2025-12-19"
+BUILD_DATE = "~0,4datetime:~4,2datetime:~6,2"

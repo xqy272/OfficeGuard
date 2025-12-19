@@ -327,6 +327,8 @@ class ModernApp:
         self.config.save()
         
         if self.locker.lock(password):
+            # 停止热键监听，避免解锁后误触发
+            self.hotkey.stop()
             self.root.withdraw()
             self._create_blocker()
             self._mouse_trap_loop()
@@ -374,6 +376,10 @@ class ModernApp:
             except:
                 pass
             self.blocker = None
+        
+        # 恢复热键监听
+        if self.config.get("hotkey_enabled"):
+            self.hotkey.start()
         
         logger.info("系统已解锁")
     
